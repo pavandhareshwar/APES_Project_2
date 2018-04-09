@@ -105,21 +105,21 @@ void create_sub_process(char *process_name)
         {    
             write_pid_to_file(process_name, getpid());
             printf("Creating socket task\n");
-            char *args[]={"./socket_task", "&", NULL};
+            char *args[]={"./Socket_Task/socket_task", "&", NULL};
             execvp(args[0],args);
         }
         else if (!strcmp(process_name, "logger"))
         {    
             write_pid_to_file(process_name, getpid());
             printf("Creating logger task\n");
-            char *args[]={"./logger_task", "&", NULL};
+            char *args[]={"./Logger_Task/logger_task", "&", NULL};
             execvp(args[0],args);
         }
         else if (!strcmp(process_name, "decision"))
         {    
             write_pid_to_file(process_name, getpid());
             printf("Creating decision task\n");
-            char *args[]={"./decision_task", "&", NULL};
+            char *args[]={"./Decision_Task/decision_task", "&", NULL};
             execvp(args[0],args);
         }
     }
@@ -354,16 +354,17 @@ void kill_already_created_processes(void)
     {
         char *token = strtok(buffer, colon_delimiter);
 
-        if (!strcmp(token, "temperature task"))
+        if (!strcmp(token, "decision task"))
         {
             token = strtok(NULL, colon_delimiter);
-            printf("Killing temperature task\n");
+            printf("Killing decision task\n");
             int pid_to_kill = atoi(token);
             
-            /* We wanted to kill the temperature process here by sending a SIGKILL,
+            /* We wanted to kill the decision task here by sending a SIGKILL,
             ** but since we could not setup a signal handler for SIGKILL, we are 
             ** sending a SIGSTOP instead and trying to handle SIGUSR1 in the 
-            ** temperature process */
+            ** decision task. Similar approach is taken for logger and socket task
+            ** as well. */
             kill(pid_to_kill, SIGUSR1);
             
             int status;
@@ -371,33 +372,12 @@ void kill_already_created_processes(void)
             if (end_id == pid_to_kill)
             {
                 if (WIFEXITED(status))
-                    printf("Temperature task successfully killed\n");
+                    printf("Decision task successfully killed\n");
             }
             else
             {
-                perror("Temperature task: waitpid error\n");
+                perror("Decision task: waitpid error\n");
             }
-        }
-        else if (!strcmp(token, "light task"))
-        {
-            token = strtok(NULL, colon_delimiter);
-            printf("Killing light task\n");
-            int pid_to_kill = atoi(token);
-            
-            kill(pid_to_kill, SIGUSR1);
-            
-            int status;
-            pid_t end_id = waitpid(pid_to_kill, &status, 0);
-            if (end_id == pid_to_kill)
-            {
-                if (WIFEXITED(status))
-                    printf("Light task successfully killed\n");
-            }
-            else
-            {
-                perror("Light task: waitpid error\n");
-            }
-
         }
         else if (!strcmp(token, "logger task"))
         {
@@ -515,9 +495,9 @@ void sig_handler(int sig_num)
     if (sig_num == SIGINT || sig_num == SIGUSR1)
     {
         if (sig_num == SIGINT)
-            printf("Caught signal %s in temperature task\n", "SIGINT");
+            printf("Caught signal %s in main task\n", "SIGINT");
         else if (sig_num == SIGUSR1)
-            printf("Caught signal %s in temperature task\n", "SIGKILL");
+            printf("Caught signal %s in main task\n", "SIGKILL");
 
         kill_already_created_processes();
         
