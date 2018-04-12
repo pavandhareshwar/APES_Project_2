@@ -1,5 +1,0 @@
-# File path for the logger file
-LOGGER_FILE_PATH=./Logger_Task/
-
-# Name of the logger file
-LOGGER_FILE_NAME=logger_file.txt
