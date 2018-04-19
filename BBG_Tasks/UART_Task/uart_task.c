@@ -53,13 +53,21 @@ int uart_task_init(void)
 {
     /* We will have all the uart task initializations here */
 
-    /* Set the message queue attributes */
+    /* Set the logger message queue attributes */
     struct mq_attr logger_mq_attr = { .mq_flags = 0,
-        .mq_maxmsg = MSG_QUEUE_MAX_NUM_MSGS,  // Max number of messages on queue
-        .mq_msgsize = MSG_QUEUE_MAX_MSG_SIZE  // Max. message size
+                                      .mq_maxmsg = MSG_QUEUE_MAX_NUM_MSGS,  // Max number of messages on queue
+                                      .mq_msgsize = MSG_QUEUE_MAX_MSG_SIZE  // Max. message size
     };
 
-    logger_mq_handle = mq_open(MSG_QUEUE_NAME, O_RDWR, S_IRWXU, &logger_mq_attr);
+    logger_mq_handle = mq_open(LOGGER_MSG_QUEUE_NAME, O_RDWR, S_IRWXU, &logger_mq_attr);
+
+    /* Set the decision message queue attributes */
+    struct mq_attr decision_mq_attr = { .mq_flags = 0,
+                                        .mq_maxmsg = MSG_QUEUE_MAX_NUM_MSGS,  // Max number of messages on queue
+                                        .mq_msgsize = MSG_QUEUE_MAX_MSG_SIZE  // Max. message size
+    };
+
+    decision_mq_handle = mq_open(DECISION_MSG_QUEUE_NAME, O_RDWR, S_IRWXU, &logger_mq_attr);
 
     uart_task_initialized = 1;
 
@@ -104,7 +112,9 @@ void *uart_rx_thread_func(void *arg)
 			printf("Source ID:%d\n", x_sock_data_rcvd.source_id);
 			printf("Step count is:%d\n",x_sock_data_rcvd.data);
 		
-            post_data_to_logger_queue(x_sock_data_rcvd);
+            post_data_to_logger_task_queue(x_sock_data_rcvd);
+
+            post_data_to_decision_task_queue(x_sock_data_rcvd);
         }
     }
 
@@ -239,11 +249,21 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
     }
 }
 
-void post_data_to_logger_queue(sock_msg x_sock_data)
+void post_data_to_logger_task_queue(sock_msg x_sock_data)
 {
     int msg_priority = 1;
 
     int num_sent_bytes = mq_send(logger_mq_handle, (char *)&x_sock_data,
+                            sizeof(sock_msg), msg_priority);
+    if (num_sent_bytes < 0)
+        perror("mq_send failed");
+}
+
+void post_data_to_decision_task_queue(sock_msg x_sock_data)
+{
+    int msg_priority = 2;
+
+    int num_sent_bytes = mq_send(decision_mq_handle, (char *)&x_sock_data,
                             sizeof(sock_msg), msg_priority);
     if (num_sent_bytes < 0)
         perror("mq_send failed");

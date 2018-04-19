@@ -53,9 +53,26 @@ int decision_task_init(void)
     struct mq_attr logger_mq_attr = { .mq_flags = 0,
                                         .mq_maxmsg = MSG_QUEUE_MAX_NUM_MSGS,  // Max number of messages on queue
                                         .mq_msgsize = MSG_QUEUE_MAX_MSG_SIZE  // Max. message size
-    };
+                                    };
 
-    logger_mq_handle = mq_open(MSG_QUEUE_NAME, O_RDWR, S_IRWXU, &logger_mq_attr);
+    logger_mq_handle = mq_open(LOGGER_MSG_QUEUE_NAME, O_RDWR, S_IRWXU, &logger_mq_attr);
+
+    /* Create a message queue that will be shared between uart task and the decision task to
+     * share the message received from Tiva */
+    struct mq_attr decision_mq_attr = { .mq_flags = 0,
+                                      .mq_maxmsg = MSG_QUEUE_MAX_NUM_MSGS,  // Max number of messages on queue
+                                      .mq_msgsize = MSG_QUEUE_MAX_MSG_SIZE  // Max. message size
+                                    };
+
+
+    decision_mq_handle = mq_open(DECISION_MSG_QUEUE_NAME, O_CREAT | O_RDWR, S_IRWXU, &decision_mq_attr);
+    if (decision_mq_handle < 0)
+    {
+        perror("Decision task message queue create failed");
+        return -1;
+    }
+
+    printf("Decision task message queue successfully created\n")
 
     decision_task_initialized = 1;
 
@@ -85,7 +102,11 @@ void *decision_thread_func(void *arg)
 {
     while(!g_sig_kill_decision_thread)
     {
-        sleep(10);
+        /* This thread will continuously wait for messages on the message queue
+         * and process it to take some decision */
+        read_from_decision_task_msg_queue();
+    
+        sleep(5);
     }
 
     pthread_exit(NULL);
@@ -173,6 +194,31 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
     {
         perror("listen failed");
         pthread_exit(NULL);
+    }
+}
+
+void read_from_decision_task_msg_queue(void)
+{
+    char recv_buffer[MSG_MAX_LEN];
+    memset(recv_buffer, '\0', sizeof(recv_buffer));
+
+    int msg_priority;
+
+    int num_recv_bytes;
+    while ((num_recv_bytes = mq_receive(decision_mq_handle, (char *)&recv_buffer,
+                    MSG_QUEUE_MAX_MSG_SIZE, &msg_priority)) != -1)
+    {
+        if (num_recv_bytes < 0)
+        {
+            perror("mq_receive failed");
+            return;
+        }
+
+        printf("Pedometer count: %d, msg_src: %d, log level: %d, log_type: %d\n",
+            (((struct _socket_msg_struct_ *)&recv_buffer)->data),
+            (((struct _socket_msg_struct_ *)&recv_buffer)->source_id),
+            (((struct _socket_msg_struct_ *)&recv_buffer)->log_level),
+            (((struct _socket_msg_struct_ *)&recv_buffer)->log_type));
     }
 }
 

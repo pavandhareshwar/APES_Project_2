@@ -5,20 +5,20 @@
  * Description:  Source file describing the functionality and implementation
  *               of decision task.
  *****************************************************************************/
-#include "socket_task.h"
+#include "comm_task.h"
 
 int main(void)
 {
-    socket_task_initialized = 0;
+    comm_task_initialized = 0;
 
-    int socket_task_init_status = socket_task_init();
-    if (socket_task_init_status)
+    int comm_task_init_status = comm_task_init();
+    if (comm_task_init_status)
     {
-        printf("Socket task init failed\n");
+        printf("Comm task init failed\n");
     }
     else
     {
-        printf("Socket task init success\n");
+        printf("Comm task init success\n");
     }
 
     int thread_create_status = create_threads();
@@ -37,30 +37,50 @@ int main(void)
     if (signal(SIGUSR1, sig_handler) == SIG_ERR)
         printf("SigHandler setup for SIGKILL failed\n");
 
-    g_sig_kill_socket_thread = 0;
+    g_sig_kill_comm_thread = 0;
     g_sig_kill_sock_hb_thread = 0;
 
-    pthread_join(socket_thread_id, NULL);
+    pthread_join(comm_thread_id, NULL);
     pthread_join(socket_hb_thread_id, NULL);
 
     return 0;
 }
 
-int socket_task_init(void)
+int comm_task_init(void)
 {
     /* We will have all the socket task initializations here */
+    /* Create the logger task message queue handle */
+    /* Set the message queue attributes */
+    struct mq_attr logger_mq_attr = { .mq_flags = 0,
+                                        .mq_maxmsg = MSG_QUEUE_MAX_NUM_MSGS,  // Max number of messages on queue
+                                        .mq_msgsize = MSG_QUEUE_MAX_MSG_SIZE  // Max. message size
+                                    };
 
-    socket_task_initialized = 1;
+    logger_mq_handle = mq_open(LOGGER_MSG_QUEUE_NAME, O_RDWR, S_IRWXU, &logger_mq_attr);
+
+    /* Set the decision message queue attributes */
+     struct mq_attr decision_mq_attr = { .mq_flags = 0,
+                                         .mq_maxmsg = MSG_QUEUE_MAX_NUM_MSGS,  // Max number of messages on queue
+                                         .mq_msgsize = MSG_QUEUE_MAX_MSG_SIZE  // Max. message size
+                                        };
+ 
+     decision_mq_handle = mq_open(DECISION_MSG_QUEUE_NAME, O_RDWR, S_IRWXU, &decision_mq_attr);
+
+#ifdef USE_UART_FOR_COMM
+    uart4_init();
+#endif
+
+    comm_task_initialized = 1;
 
     return 0;
 }
 
 int create_threads(void)
 {
-    int socket_t_creat_ret_val = pthread_create(&socket_thread_id, NULL, &socket_thread_func, NULL);
-    if (socket_t_creat_ret_val)
+    int comm_t_creat_ret_val = pthread_create(&comm_thread_id, NULL, &comm_thread_func, NULL);
+    if (comm_t_creat_ret_val)
     {
-        perror("Socket thread creation failed");
+        perror("Comm thread creation failed");
         return -1;
     }
 
@@ -74,11 +94,29 @@ int create_threads(void)
     return 0;
 }
 
-void *socket_thread_func(void *arg)
+void *comm_thread_func(void *arg)
 {
-    while(!g_sig_kill_socket_thread)
+    sock_msg x_sock_data_rcvd;
+    
+    while(!g_sig_kill_comm_thread)
     {
-        sleep(10);
+        memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
+
+#ifdef USE_UART_FOR_COMM
+        if (read(uart4_fd, &x_sock_data_rcvd, sizeof(x_sock_data_rcvd)) > 0)
+        {
+#if 0
+            printf("\nReceived data from TIVA:\n");
+            printf("Log Level:%d\n", x_sock_data_rcvd.log_level);
+            printf("Log Type:%d\n", x_sock_data_rcvd.log_type);
+            printf("Source ID:%d\n", x_sock_data_rcvd.source_id);
+            printf("Step count is:%d\n",x_sock_data_rcvd.data);
+#endif   
+            post_data_to_logger_task_queue(x_sock_data_rcvd);
+            
+            post_data_to_decision_task_queue(x_sock_data_rcvd);
+        }
+#endif
     }
 
     pthread_exit(NULL);
@@ -121,7 +159,7 @@ void *socket_hb_thread_func(void *arg)
             /* For the sake of start-up check, because we have the main socket task 
              * initialized by the time this thread is spawned, we send a response 
              * that the task is initialized */
-            if (socket_task_initialized == 1)
+            if (comm_task_initialized == 1)
                 strcpy(send_buffer, "Initialized");
             else
                 strcpy(send_buffer, "Uninitialized");
@@ -170,6 +208,71 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
     }
 }
 
+#ifdef USE_UART_FOR_COMM
+
+/* UART4 Configuration */
+void config_uart_port(struct termios *uart_conf, int uart_desc)
+{
+    tcgetattr(uart_desc, uart_conf);
+
+    uart_conf->c_iflag &= ~(IGNBRK | BRKINT | ICRNL | INLCR | PARMRK | INPCK | ISTRIP | IXON);
+    uart_conf->c_oflag = 0;
+    uart_conf->c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
+    uart_conf->c_cc[VMIN] = 1;
+    uart_conf->c_cc[VTIME] = 0;
+
+    if(cfsetispeed(uart_conf, B115200) || cfsetospeed(uart_conf, B115200))
+    {
+        perror("Error in setting baud rate for UART4\n");
+    }
+
+
+    if(tcsetattr(uart_desc, TCSAFLUSH, uart_conf) < 0)
+    {
+        perror("Error in setting attributes for UART4\n");
+    }
+}
+
+/* UART4 Initialization*/
+void uart4_init(void)
+{
+    if((uart4_fd = open(uart4_port, O_RDWR | O_NOCTTY | O_SYNC | O_NONBLOCK)) == -1)
+    {
+        perror("Error in opening UART4 file descriptor\n");
+        return;
+    }
+
+    uart4_config = (struct termios*)malloc(sizeof(struct termios));
+    config_uart_port(uart4_config, uart4_fd);
+
+    if(tcsetattr(uart4_fd,TCSAFLUSH, uart4_config) < 0)
+    {
+        printf("Error in setting attributes for UART port\n");
+        return;
+    }
+}
+#endif
+
+void post_data_to_logger_task_queue(sock_msg x_sock_data)
+{
+    int msg_priority = 1;
+
+    int num_sent_bytes = mq_send(logger_mq_handle, (char *)&x_sock_data,
+            sizeof(sock_msg), msg_priority);
+    if (num_sent_bytes < 0)
+        perror("mq_send failed");
+}
+
+void post_data_to_decision_task_queue(sock_msg x_sock_data)
+{
+    int msg_priority = 1;
+
+    int num_sent_bytes = mq_send(decision_mq_handle, (char *)&x_sock_data,
+            sizeof(sock_msg), msg_priority);
+    if (num_sent_bytes < 0)
+        perror("mq_send failed");
+}
+
 void sig_handler(int sig_num)
 {
     char buffer[MSG_BUFF_MAX_LEN];
@@ -182,7 +285,7 @@ void sig_handler(int sig_num)
         else if (sig_num == SIGUSR1)
             printf("Caught signal %s in socket task\n", "SIGKILL");
         
-        g_sig_kill_socket_thread = 1;
+        g_sig_kill_comm_thread = 1;
         g_sig_kill_sock_hb_thread = 1;
         
         //pthread_join(sensor_thread_id, NULL);

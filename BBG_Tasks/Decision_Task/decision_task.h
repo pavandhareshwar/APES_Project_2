@@ -38,7 +38,8 @@
 // Message queue attribute macros 
 #define MSG_QUEUE_MAX_NUM_MSGS               5
 #define MSG_QUEUE_MAX_MSG_SIZE               1024
-#define MSG_QUEUE_NAME                       "/logger_task_mq"
+#define DECISION_MSG_QUEUE_NAME              "/decision_task_mq"
+#define LOGGER_MSG_QUEUE_NAME                "/logger_task_mq"
 
 #define MSG_MAX_LEN                          128
 #define MSG_BUFF_MAX_LEN                     1024
@@ -49,7 +50,7 @@
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
-mqd_t logger_mq_handle;
+mqd_t decision_mq_handle, logger_mq_handle;
 pthread_t decision_thread_id, socket_hb_thread_id;
 
 sig_atomic_t g_sig_kill_decision_thread, g_sig_kill_sock_hb_thread;
@@ -59,6 +60,13 @@ int decision_task_initialized;
 /*---------------------------------- GLOBALS --------------------------------*/
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
+struct _socket_msg_struct_                                                                            
+{
+    uint32_t log_level;
+    uint32_t log_type;
+    uint32_t source_id;
+	uint32_t data;
+};
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
 
@@ -120,6 +128,18 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
                int port_num, int listen_qsize);
 
 /**
+ *  @brief Read message from decision task message queue
+ *
+ *  This function will read messages from decision task message queue and process it to take 
+ *  some decision
+ *
+ *  @param void
+ *
+ *  @return void
+*/
+void read_from_decision_task_msg_queue(void);
+
+/**
  *  @brief Signal handler for decision task
  *
  *  This function handles the reception of SIGKILL and SIGINT signal to the
@@ -129,6 +149,6 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
  *
  *  @return void
 */
-
 void sig_handler(int sig_num);
+
 #endif // _DECISION_TASK_H_

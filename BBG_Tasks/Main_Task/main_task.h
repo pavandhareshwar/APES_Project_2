@@ -38,8 +38,8 @@
 #define LOGGER_TASK_PORT_NUM 			    8650
 #define LOGGER_TASK_QUEUE_SIZE			    10
 
-#define SOCKET_TASK_PORT_NUM 			    8660
-#define SOCKET_TASK_QUEUE_SIZE			    10
+#define COMM_TASK_PORT_NUM 			        8660
+#define COMM_TASK_QUEUE_SIZE			    10
 
 #define DECISION_TASK_PORT_NUM 			    8670
 #define DECISION_TASK_QUEUE_SIZE			10
@@ -55,7 +55,7 @@
 #define MSG_QUEUE_MAX_MSG_SIZE              1024
 
 #define LOGGER_TASK_UNALIVE_CNT_LOG_LIMIT   5
-#define SOCK_TASK_UNALIVE_CNT_LOG_LIMIT     5
+#define COMM_TASK_UNALIVE_CNT_LOG_LIMIT     5
 #define DECISION_TASK_UNALIVE_CNT_LOG_LIMIT 5
 
 #define LOGGER_ATTR_LEN                     32
@@ -64,11 +64,11 @@
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
-int socket_task_sockfd, logger_task_sockfd, decision_task_sockfd;
+int comm_task_sockfd, logger_task_sockfd, decision_task_sockfd;
 
-struct sockaddr_in socket_task_sock_addr, logger_task_sock_addr, decision_task_sock_addr;
+struct sockaddr_in comm_task_sock_addr, logger_task_sock_addr, decision_task_sock_addr;
 
-int logger_task_unalive_count, socket_task_unalive_count, decision_task_unalive_count;
+int logger_task_unalive_count, comm_task_unalive_count, decision_task_unalive_count;
 
 mqd_t logger_mq_handle;
 

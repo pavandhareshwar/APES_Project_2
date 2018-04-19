@@ -31,12 +31,12 @@ int main(void)
         return -1;
     }
 
-    /* Create and initialize socket task socket */
-    initialize_sub_task_socket(&socket_task_sockfd, &socket_task_sock_addr, SOCKET_TASK_PORT_NUM);
+    /* Create and initialize comm task socket */
+    initialize_sub_task_socket(&comm_task_sockfd, &comm_task_sock_addr, COMM_TASK_PORT_NUM);
 
-    if (connect(socket_task_sockfd, (struct sockaddr *)&socket_task_sock_addr, sizeof(socket_task_sock_addr)) < 0)
+    if (connect(comm_task_sockfd, (struct sockaddr *)&comm_task_sock_addr, sizeof(comm_task_sock_addr)) < 0)
     {
-        printf("\nConnection Failed for socket task \n");
+        printf("\nConnection Failed for comm task \n");
         return -1;
     }
 
@@ -79,12 +79,12 @@ void create_sub_processes(void)
     memset(sub_process_name, '\0', sizeof(sub_process_name));
     strcpy(sub_process_name, "logger"); 
     create_sub_process(sub_process_name);
-  
+
     /* Creating socket task */
     memset(sub_process_name, '\0', sizeof(sub_process_name));
-    strcpy(sub_process_name, "socket"); 
+    strcpy(sub_process_name, "comm"); 
     create_sub_process(sub_process_name);
-    
+
     /* Creating decision task */
     memset(sub_process_name, '\0', sizeof(sub_process_name));
     strcpy(sub_process_name, "decision"); 
@@ -101,11 +101,11 @@ void create_sub_process(char *process_name)
     if (child_pid == 0)
     {
         /* Child Process */
-        if (!strcmp(process_name, "socket"))
+        if (!strcmp(process_name, "comm"))
         {    
             write_pid_to_file(process_name, getpid());
-            printf("Creating socket task\n");
-            char *args[]={"./Socket_Task/socket_task", "&", NULL};
+            printf("Creating comm task\n");
+            char *args[]={"./Comm_Task/comm_task", "&", NULL};
             execvp(args[0],args);
         }
         else if (!strcmp(process_name, "logger"))
@@ -215,7 +215,7 @@ void initialize_sub_task_socket(int *sock_fd, struct sockaddr_in *sock_addr_stru
 void check_status_of_sub_tasks(void)
 {
     /* Check if socket task is alive */
-    check_subtask_status(socket_task_sockfd, "Socket"); 
+    check_subtask_status(comm_task_sockfd, "Comm"); 
 
     /* Check if logger task is alive */
     check_subtask_status(logger_task_sockfd, "Logger");
@@ -250,11 +250,11 @@ void check_subtask_status(int sock_fd, char *task_name)
             if (logger_task_unalive_count >= LOGGER_TASK_UNALIVE_CNT_LOG_LIMIT)
                 log_task_unalive_msg_to_log_file(task_name);
         }
-        else if (!strcmp(task_name, "Socket"))
+        else if (!strcmp(task_name, "Comm"))
         {
-            socket_task_unalive_count++;
+            comm_task_unalive_count++;
 
-            if (socket_task_unalive_count >= SOCK_TASK_UNALIVE_CNT_LOG_LIMIT)
+            if (comm_task_unalive_count >= COMM_TASK_UNALIVE_CNT_LOG_LIMIT)
                 log_task_unalive_msg_to_log_file(task_name);
         }
         else if (!strcmp(task_name, "Decision"))
@@ -279,8 +279,8 @@ void perform_startup_test(void)
         stop_entire_system();
     
     /* Check the socket task */
-    int socket_task_st_status = perform_sub_task_startup_test(socket_task_sockfd, "socket");
-    if (socket_task_st_status != 0)
+    int comm_task_st_status = perform_sub_task_startup_test(comm_task_sockfd, "comm");
+    if (comm_task_st_status != 0)
         stop_entire_system();
     
     /* Check the decision task */
@@ -399,7 +399,7 @@ void kill_already_created_processes(void)
                 perror("Logger task: waitpid error\n");
             }
         }
-        else if (!strcmp(token, "socket task"))
+        else if (!strcmp(token, "comm task"))
         {
             token = strtok(NULL, colon_delimiter);
             printf("Killing socket task\n");

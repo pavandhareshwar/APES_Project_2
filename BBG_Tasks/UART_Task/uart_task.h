@@ -41,7 +41,8 @@
 // Message queue attribute macros 
 #define MSG_QUEUE_MAX_NUM_MSGS               5
 #define MSG_QUEUE_MAX_MSG_SIZE               1024
-#define MSG_QUEUE_NAME                       "/logger_task_mq"
+#define LOGGER_MSG_QUEUE_NAME                "/logger_task_mq"
+#define DECISION_MSG_QUEUE_NAME              "/decision_task_mq"
 
 #define MSG_MAX_LEN                          128
 #define MSG_BUFF_MAX_LEN                     1024
@@ -70,7 +71,7 @@
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
-mqd_t logger_mq_handle;
+mqd_t logger_mq_handle, decision_mq_handle;
 pthread_t uart_rx_thread_id, socket_hb_thread_id;
 
 sig_atomic_t g_sig_kill_uart_rx_thread, g_sig_kill_sock_hb_thread;
@@ -88,7 +89,8 @@ int uart4_fd;
 
 /*---------------------------- STRUCTURES----------------------*/
 /* Socket message structure */
-typedef struct {
+typedef struct 
+{
     uint32_t log_level;
     uint32_t log_type;
     uint32_t source_id;
@@ -177,7 +179,7 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
                int port_num, int listen_qsize);
 
 /**
- *  @brief Post data to logger message queue
+ *  @brief Post data to logger task message queue
  *
  *  This function writes the messgae received from a Tiva task to the logger message 
  *  queue
@@ -186,7 +188,19 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
  *
  *  @return void
 */
-void post_data_to_logger_queue(sock_msg x_sock_data);
+void post_data_to_logger_task_queue(sock_msg x_sock_data);
+
+/**
+ *  @brief Post data to decision task message queue
+ *
+ *  This function writes the messgae received from a Tiva task to the decision message 
+ *  queue
+ *
+ *  @param x_sock_data     : socket message structure
+ *
+ *  @return void
+*/
+void post_data_to_decision_task_queue(sock_msg x_sock_data);
 
 /**
  *  @brief Signal handler for decision task

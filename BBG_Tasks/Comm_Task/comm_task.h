@@ -1,13 +1,13 @@
 /*************************************************************************
 * Author:       Pavan Dhareshwar & Sridhar Pavithrapu
 * Date:         04/08/2018
-* File:         socket_task.h
+* File:         comm_task.h
 * Description:  Header file containing the macros, structs/enums, globals
-                and function prototypes for source file socket_task.c
+                and function prototypes for source file comm_task.c
 *************************************************************************/
 
-#ifndef _SOCKET_TASK_H_
-#define _SOCKET_TASK_H_
+#ifndef _COMM_TASK_H_
+#define _COMM_TASK_H_
 
 /*---------------------------------- INCLUDES -------------------------------*/
 #include <stdio.h>
@@ -32,13 +32,18 @@
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
+
+#include <termios.h>
 /*---------------------------------- INCLUDES -------------------------------*/
 
 /*----------------------------------- MACROS --------------------------------*/
+#define USE_UART_FOR_COMM                    1
+
 // Message queue attribute macros 
 #define MSG_QUEUE_MAX_NUM_MSGS               5
 #define MSG_QUEUE_MAX_MSG_SIZE               1024
-#define MSG_QUEUE_NAME                       "/logger_task_mq"
+#define LOGGER_MSG_QUEUE_NAME                "/logger_task_mq"
+#define DECISION_MSG_QUEUE_NAME              "/decision_task_mq"
 
 #define MSG_MAX_LEN                          128
 #define MSG_BUFF_MAX_LEN                     1024
@@ -49,16 +54,31 @@
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
-mqd_t logger_mq_handle;
-pthread_t socket_thread_id, socket_hb_thread_id;
+mqd_t logger_mq_handle, decision_mq_handle;
+pthread_t comm_thread_id, socket_hb_thread_id;
 
-sig_atomic_t g_sig_kill_socket_thread, g_sig_kill_sock_hb_thread;
+sig_atomic_t g_sig_kill_comm_thread, g_sig_kill_sock_hb_thread;
 
-int socket_task_initialized;
+int comm_task_initialized;
+
+#ifdef USE_UART_FOR_COMM
+/* UART configuration variables */
+struct termios *uart4_config;
+char *uart4_port = "/dev/ttyO4";
+int uart4_fd;
+#endif
 
 /*---------------------------------- GLOBALS --------------------------------*/
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
+/* Socket message structure */
+typedef struct 
+{
+    uint32_t log_level;
+    uint32_t log_type;
+    uint32_t source_id;
+	uint32_t data;
+} sock_msg;
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
 
@@ -82,16 +102,16 @@ int socket_task_initialized;
 int create_threads(void);
 
 /**
- *  @brief Entry point and executing entity for main socket thread
+ *  @brief Entry point and executing entity for main communication thread
  *
- *  The main socket thread starts execution by invoking this function(start_routine)
+ *  The main comm thread starts execution by invoking this function(start_routine)
  *
  *  @param arg : argument to start_routine
  *
  *  @return void
  *
  */
-void *socket_thread_func(void *arg);
+void *comm_thread_func(void *arg);
 
 /**
  *  @brief Entry point and executing entity for socket heartbeat thread
@@ -131,5 +151,67 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
  *  @return void
 */
 
+#ifdef USE_UART_FOR_COMM
+/**
+ *  @brief Entry point for configuring UART port
+ *
+ *  Configuration for UART port
+ *
+ *  @param uart_conf : uart configuration variable
+ *         uart_desc:  uart file descriptor
+ *
+ *  @return void
+ *
+ */
+void config_uart_port(struct termios *uart_conf, int uart_desc);
+
+/**
+ *  @brief Entry point for intializing UART
+ *
+ *  @param void
+ *
+ *  @return void
+ *
+ */
+void uart4_init(void);
+#endif
+
+/**
+ *  @brief Post data to logger task message queue
+ *
+ *  This function writes the messgae received from a Tiva task to the logger message
+ *  queue
+ *
+ *  @param x_sock_data     : socket message structure
+ *
+ *  @return void
+*/
+void post_data_to_logger_task_queue(sock_msg x_sock_data);
+
+/**
+ *  @brief Post data to decision task message queue
+ *
+ *  This function writes the message received from a Tiva task to the decision task 
+ *  message queue
+ *
+ *  @param x_sock_data     : socket message structure
+ *
+ *  @return void
+*/
+void post_data_to_decision_task_queue(sock_msg x_sock_data);
+
+/**
+ *  @brief Signal handler for decision task
+ *
+ *  This function handles the reception of SIGKILL and SIGINT signal to the
+ *  decision task and terminates all the threads and logger message queue handle and exits.
+ *
+ *  @param sig_num              : signal number
+ *
+ *  @return void
+*/
 void sig_handler(int sig_num);
-#endif // _DECISION_TASK_H_
+
+/*---------------------------- FUNCTION PROTOTYPES --------------------------*/
+
+#endif // _COMM_TASK_H_
