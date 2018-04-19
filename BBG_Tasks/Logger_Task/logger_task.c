@@ -325,28 +325,60 @@ void read_from_logger_msg_queue(void)
         char msg_to_write[LOG_MSG_PAYLOAD_SIZE];
         memset(msg_to_write, '\0', sizeof(msg_to_write));
         
+        char step_count_msg[32];
+        memset(step_count_msg, '\0', sizeof(step_count_msg));
+            
+        sprintf(step_count_msg, "Message: Step count: %d\n", (((struct _socket_msg_struct_ *)&recv_buffer)->data));
+        
         if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_PEDOMETER)
         {
-            char step_count_msg[32];
-            memset(step_count_msg, '\0', sizeof(step_count_msg));
-
-            sprintf(step_count_msg, "Step count: %d", (((struct _socket_msg_struct_ *)&recv_buffer)->data));
-            sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s | Log_Level: %d | Log_Type: %d | Message: %s\n",
-                    timestamp_str, "Pedometer Task",
-                    (((struct _socket_msg_struct_ *)&recv_buffer)->log_level),
-                    (((struct _socket_msg_struct_ *)&recv_buffer)->log_type),
-                    step_count_msg);
+            sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
+                    timestamp_str, "Pedometer Task");
 
         }
         else if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_HEART_RATE)
         {
+            sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
+                    timestamp_str, "Heart Rate Task");
 
         }
-        else 
+
+        if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_level) == LOG_LEVEL_INFO)
         {
-            /* Do nothing */
+            strcat(msg_to_write, "| Log_Level: LOG_LEVEL_INFO ");
+        }
+        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_level) == LOG_LEVEL_STARTUP)
+        {
+            strcat(msg_to_write, "| Log_Level: LOG_LEVEL_STARTUP ");
+        }
+        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_level) == LOG_LEVEL_SHUTDOWN)
+        {
+            strcat(msg_to_write, "| Log_Level: LOG_LEVEL_SHUTDOWN ");
+        }
+        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_level) == LOG_LEVEL_CRITICAL)
+        {
+            strcat(msg_to_write, "| Log_Level: LOG_LEVEL_CRITICAL ");
         }
 
+        if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_type) == LOG_TYPE_DATA)
+        {
+            strcat(msg_to_write, "| Log_Type: LOG_TYPE_DATA ");
+        }
+        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_type) == LOG_TYPE_ERROR)
+        {
+            strcat(msg_to_write, "| Log_Type: LOG_TYPE_ERROR ");
+        }
+        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_type) == LOG_TYPE_REQUEST)
+        {
+            strcat(msg_to_write, "| Log_Type: LOG_TYPE_REQUEST ");
+        }
+        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_type) == LOG_TYPE_RESPONSE)
+        {
+            strcat(msg_to_write, "| Log_Type: LOG_TYPE_RESPONSE ");
+        }
+
+        strcat(msg_to_write, " | ");
+        strcat(msg_to_write, step_count_msg);
 
         printf("Message to write: %s\n", msg_to_write);
         int num_written_bytes = write(logger_fd, msg_to_write, strlen(msg_to_write));
