@@ -75,7 +75,7 @@ pthread_t uart_rx_thread_id, socket_hb_thread_id;
 
 sig_atomic_t g_sig_kill_uart_rx_thread, g_sig_kill_sock_hb_thread;
 
-int socket_task_initialized;
+int uart_task_initialized;
 
 /* UART configuration variables */
 struct termios *uart4_config;
@@ -177,6 +177,18 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
                int port_num, int listen_qsize);
 
 /**
+ *  @brief Post data to logger message queue
+ *
+ *  This function writes the messgae received from a Tiva task to the logger message 
+ *  queue
+ *
+ *  @param x_sock_data     : socket message structure
+ *
+ *  @return void
+*/
+void post_data_to_logger_queue(sock_msg x_sock_data);
+
+/**
  *  @brief Signal handler for decision task
  *
  *  This function handles the reception of SIGKILL and SIGINT signal to the
@@ -188,4 +200,4 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
 */
 
 void sig_handler(int sig_num);
-#endif // _DECISION_TASK_H_
+#endif // _UART_TASK_H_

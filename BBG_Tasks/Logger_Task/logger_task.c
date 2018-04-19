@@ -314,13 +314,6 @@ void read_from_logger_msg_queue(void)
             return;
         }
 
-#if 0
-        printf("Message received: %s, msg_src: %s, message level: %s\n", 
-            (((struct _logger_msg_struct_ *)&recv_buffer)->message),
-            (((struct _logger_msg_struct_ *)&recv_buffer)->logger_msg_src_id),
-            (((struct _logger_msg_struct_ *)&recv_buffer)->logger_msg_level));
-#endif
-
         time_t tval = time(NULL);
         struct tm *cur_time = localtime(&tval);
         
@@ -332,10 +325,28 @@ void read_from_logger_msg_queue(void)
         char msg_to_write[LOG_MSG_PAYLOAD_SIZE];
         memset(msg_to_write, '\0', sizeof(msg_to_write));
         
-        sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s | Message_Type: %s | Message: %s\n",
-            timestamp_str, (((struct _logger_msg_struct_ *)&recv_buffer)->logger_msg_src_id),
-            (((struct _logger_msg_struct_ *)&recv_buffer)->logger_msg_level),
-            (((struct _logger_msg_struct_ *)&recv_buffer)->message));
+        if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_PEDOMETER)
+        {
+            char step_count_msg[32];
+            memset(step_count_msg, '\0', sizeof(step_count_msg));
+
+            sprintf(step_count_msg, "Step count: %d", (((struct _socket_msg_struct_ *)&recv_buffer)->data));
+            sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s | Log_Level: %d | Log_Type: %d | Message: %s\n",
+                    timestamp_str, "Pedometer Task",
+                    (((struct _socket_msg_struct_ *)&recv_buffer)->log_level),
+                    (((struct _socket_msg_struct_ *)&recv_buffer)->log_type),
+                    step_count_msg);
+
+        }
+        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_HEART_RATE)
+        {
+
+        }
+        else 
+        {
+            /* Do nothing */
+        }
+
 
         printf("Message to write: %s\n", msg_to_write);
         int num_written_bytes = write(logger_fd, msg_to_write, strlen(msg_to_write));

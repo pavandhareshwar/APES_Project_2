@@ -1,6 +1,6 @@
 /******************************************************************************
  * Author:       Pavan Dhareshwar & Sridhar Pavithrapu
- * Date:         04/08/2018
+ * Date:         04/18/2018
  * File:         uart_task.c
  * Description:  Source file describing the functionality and implementation
  *               of uart task.
@@ -9,19 +9,19 @@
 
 int main(void)
 {
-    socket_task_initialized = 0;
+    uart_task_initialized = 0;
 	
 	/* Initialization of UART4 */
 	uart4_init();
 
-    int socket_task_init_status = socket_task_init();
-    if (socket_task_init_status)
+    int uart_task_init_status = uart_task_init();
+    if (uart_task_init_status)
     {
-        printf("Socket task init failed\n");
+        printf("Uart task init failed\n");
     }
     else
     {
-        printf("Socket task init success\n");
+        printf("Uart task init success\n");
     }
 
     int thread_create_status = create_threads();
@@ -49,11 +49,19 @@ int main(void)
     return 0;
 }
 
-int socket_task_init(void)
+int uart_task_init(void)
 {
-    /* We will have all the socket task initializations here */
+    /* We will have all the uart task initializations here */
 
-    socket_task_initialized = 1;
+    /* Set the message queue attributes */
+    struct mq_attr logger_mq_attr = { .mq_flags = 0,
+        .mq_maxmsg = MSG_QUEUE_MAX_NUM_MSGS,  // Max number of messages on queue
+        .mq_msgsize = MSG_QUEUE_MAX_MSG_SIZE  // Max. message size
+    };
+
+    logger_mq_handle = mq_open(MSG_QUEUE_NAME, O_RDWR, S_IRWXU, &logger_mq_attr);
+
+    uart_task_initialized = 1;
 
     return 0;
 }
@@ -79,23 +87,25 @@ int create_threads(void)
 
 void *uart_rx_thread_func(void *arg)
 {
-	sock_msg packet_recv;
+	sock_msg x_sock_data_rcvd;
 	
     while(!g_sig_kill_uart_rx_thread)
     {
-        memset(&packet_recv,'\0',sizeof(packet_recv));
+        memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
 		
 		int received_bytes;
 		
-		received_bytes = read(uart4_fd,&packet_recv,sizeof(packet_recv));
+		received_bytes = read(uart4_fd, &x_sock_data_rcvd,sizeof(x_sock_data_rcvd));
 		if(received_bytes > 0)
 		{
 			printf("\nReceived data from TIVA:\n");
-			printf("Log Level:%d\n", packet_recv.log_level);
-			printf("Log Type:%d\n", packet_recv.log_type);
-			printf("Source ID:%d\n", packet_recv.source_id);
-			printf("Step count is:%d\n",packet_recv.data);
-		}
+			printf("Log Level:%d\n", x_sock_data_rcvd.log_level);
+			printf("Log Type:%d\n", x_sock_data_rcvd.log_type);
+			printf("Source ID:%d\n", x_sock_data_rcvd.source_id);
+			printf("Step count is:%d\n",x_sock_data_rcvd.data);
+		
+            post_data_to_logger_queue(x_sock_data_rcvd);
+        }
     }
 
     pthread_exit(NULL);
@@ -138,7 +148,7 @@ void *socket_hb_thread_func(void *arg)
             /* For the sake of start-up check, because we have the main socket task 
              * initialized by the time this thread is spawned, we send a response 
              * that the task is initialized */
-            if (socket_task_initialized == 1)
+            if (uart_task_initialized == 1)
                 strcpy(send_buffer, "Initialized");
             else
                 strcpy(send_buffer, "Uninitialized");
@@ -153,43 +163,43 @@ void *socket_hb_thread_func(void *arg)
 /* UART4 Configuration */
 void config_uart_port(struct termios *uart_conf, int uart_desc)
 {
-  tcgetattr(uart_desc, uart_conf);
-  
-  uart_conf->c_iflag &= ~(IGNBRK | BRKINT | ICRNL | INLCR | PARMRK | INPCK | ISTRIP | IXON);
-  uart_conf->c_oflag = 0;
-  uart_conf->c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
-  uart_conf->c_cc[VMIN] = 1;
-  uart_conf->c_cc[VTIME] = 0;
-  
-  if(cfsetispeed(uart_conf, B115200) || cfsetospeed(uart_conf, B115200))
-  {
-    perror("Error in setting baud rate for UART4\n");
-  }
+    tcgetattr(uart_desc, uart_conf);
+
+    uart_conf->c_iflag &= ~(IGNBRK | BRKINT | ICRNL | INLCR | PARMRK | INPCK | ISTRIP | IXON);
+    uart_conf->c_oflag = 0;
+    uart_conf->c_lflag &= ~(ECHO | ECHONL | ICANON | IEXTEN | ISIG);
+    uart_conf->c_cc[VMIN] = 1;
+    uart_conf->c_cc[VTIME] = 0;
+
+    if(cfsetispeed(uart_conf, B115200) || cfsetospeed(uart_conf, B115200))
+    {
+        perror("Error in setting baud rate for UART4\n");
+    }
 
 
-  if(tcsetattr(uart_desc, TCSAFLUSH, uart_conf) < 0)
-  {
-    perror("Error in setting attributes for UART4\n");
-  }
+    if(tcsetattr(uart_desc, TCSAFLUSH, uart_conf) < 0)
+    {
+        perror("Error in setting attributes for UART4\n");
+    }
 }
 
 /* UART4 Initialization*/
 void uart4_init(void)
 {
-  if((uart4_fd = open(uart4_port, O_RDWR | O_NOCTTY | O_SYNC | O_NONBLOCK)) == -1)
-  {
-	  perror("Error in opening UART4 file descriptor\n");
-	  return;
-  }
+    if((uart4_fd = open(uart4_port, O_RDWR | O_NOCTTY | O_SYNC | O_NONBLOCK)) == -1)
+    {
+        perror("Error in opening UART4 file descriptor\n");
+        return;
+    }
 
-  uart4_config = (struct termios*)malloc(sizeof(struct termios));
-  config_uart_port(uart4_config, uart4_fd);
+    uart4_config = (struct termios*)malloc(sizeof(struct termios));
+    config_uart_port(uart4_config, uart4_fd);
 
-  if(tcsetattr(uart4_fd,TCSAFLUSH, uart4_config) < 0)
-  {
-		printf("Error in setting attributes for UART port\n");
-		return;
-  }
+    if(tcsetattr(uart4_fd,TCSAFLUSH, uart4_config) < 0)
+    {
+        printf("Error in setting attributes for UART port\n");
+        return;
+    }
 }
 
 void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
@@ -227,6 +237,16 @@ void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
         perror("listen failed");
         pthread_exit(NULL);
     }
+}
+
+void post_data_to_logger_queue(sock_msg x_sock_data)
+{
+    int msg_priority = 1;
+
+    int num_sent_bytes = mq_send(logger_mq_handle, (char *)&x_sock_data,
+                            sizeof(sock_msg), msg_priority);
+    if (num_sent_bytes < 0)
+        perror("mq_send failed");
 }
 
 void sig_handler(int sig_num)

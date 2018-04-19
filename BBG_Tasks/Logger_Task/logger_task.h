@@ -1,6 +1,6 @@
 /*************************************************************************
 * Author:       Pavan Dhareshwar & Sridhar Pavithrapu
-* Date:         04/08/2018
+* Date:         04/18/2018
 * File:         logger_task.h
 * Description:  Header file containing the macros, structs/enums, globals
                 and function prototypes for source file logger_task.c
@@ -36,27 +36,43 @@
 
 /*----------------------------------- MACROS --------------------------------*/
 // Message queue attribute macros 
-#define MSG_QUEUE_MAX_NUM_MSGS               5
-#define MSG_QUEUE_MAX_MSG_SIZE               1024
-#define MSG_QUEUE_NAME                       "/logger_task_mq"
+#define MSG_QUEUE_MAX_NUM_MSGS              5
+#define MSG_QUEUE_MAX_MSG_SIZE              1024
+#define MSG_QUEUE_NAME                      "/logger_task_mq"
 
-#define LOGGER_TASK_CONF_FILE_PATH           "./Logger_Task/logger_task_conf_file.txt"
-#define LOGGER_FILE_PATH                     "./"
-#define LOGGER_FILE_NAME                     "logger_file.txt"
-#define LOGGER_FILE_NAME_MAX_LEN             128
+#define LOGGER_TASK_CONF_FILE_PATH          "./Logger_Task/logger_task_conf_file.txt"
+#define LOGGER_FILE_PATH                    "./"
+#define LOGGER_FILE_NAME                    "logger_file.txt"
+#define LOGGER_FILE_NAME_MAX_LEN            128
 
-#define LOG_MSG_PAYLOAD_SIZE                 256
-#define MSG_MAX_LEN                          128
+#define LOG_MSG_PAYLOAD_SIZE                256
+#define MSG_MAX_LEN                         128
 
-#define MSG_BUFF_MAX_LEN                     1024
+#define MSG_BUFF_MAX_LEN                    1024
 
-#define LOGGER_FILE_PATH_LEN                 256           
-#define LOGGER_FILE_NAME_LEN                 64           
+#define LOGGER_FILE_PATH_LEN                256           
+#define LOGGER_FILE_NAME_LEN                64           
 
-#define SOCKET_HB_PORT_NUM                   8650
-#define SOCKET_HB_LISTEN_QUEUE_SIZE          10
+#define SOCKET_HB_PORT_NUM                  8650
+#define SOCKET_HB_LISTEN_QUEUE_SIZE         10
 
-#define LOGGER_ATTR_LEN                      32
+#define LOGGER_ATTR_LEN                     32
+
+/* Task Defines */
+#define TASK_PEDOMETER                      0x1
+#define TASK_HEART_RATE                     0x2
+
+/* Log type defines */
+#define LOG_TYPE_DATA                       0x1
+#define LOG_TYPE_ERROR                      0x2
+#define LOG_TYPE_REQUEST                    0x3
+#define LOG_TYPE_RESPONSE                   0x4
+
+/* Log level defines */
+#define LOG_LEVEL_INFO                      0x1
+#define LOG_LEVEL_STARTUP                   0x2
+#define LOG_LEVEL_SHUTDOWN                  0x3
+#define LOG_LEVEL_CRITICAL                  0x4
 
 /*----------------------------------- MACROS --------------------------------*/
 
@@ -72,11 +88,12 @@ int logger_task_initialized = 0;
 /*---------------------------------- GLOBALS --------------------------------*/
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
-struct _logger_msg_struct_                                                                            
-{                                                                                                     
-    char message[MSG_MAX_LEN]; 
-    char logger_msg_src_id[LOGGER_ATTR_LEN];
-    char logger_msg_level[LOGGER_ATTR_LEN];
+struct _socket_msg_struct_                                                                            
+{
+    uint32_t log_level;
+    uint32_t log_type;
+    uint32_t source_id;
+	uint32_t data;
 };
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
