@@ -1,8 +1,8 @@
 
 
 
-#ifndef PEDOMETER_TASK_H_
-#define PEDOMETER_TASK_H_
+#ifndef MAIN_H_
+#define MAIN_H_
 
 /* Headers Section */
 #include <stdint.h>
@@ -22,8 +22,10 @@
 #include "driverlib/sysctl.h"
 #include "driverlib/uart.h"
 #include "driverlib/i2c.h"
+#include "driverlib/interrupt.h"
 
 #include "utils/uartstdio.h"
+#include "inc/tm4c1294ncpdt.h"
 
 #include "FreeRTOS.h"
 
@@ -45,7 +47,6 @@
 #define WHO_AM_I_REG                        0X0F
 #define STEP_COUNT_L_REG                    0X4B
 #define STEP_COUNT_H_REG                    0X4C
-
 
 #define I2C_BASE                            I2C0_BASE
 #define LSM6DS3_SENSOR_ADDR                 0x6B
@@ -72,13 +73,46 @@
 #define PEDOMETER_SENSOR_STEP_COUNTER_L_REG 0x4B
 #define PEDOMETER_SENSOR_STEP_COUNTER_H_REG 0x4C
 
-#define PEDOMETER_COUNT_PRINT_DELAY         200000UL
+#define PEDOMETER_COUNT_PRINT_DELAY         300000UL
+
+#define MAX_MSG_LEN
+#define QUEUE_LENGTH                        10
+
+
+/* Task Defines */
+#define TASK_PEDOMETER                      0x1
+#define TASK_HEART_RATE                     0x2
+
+/* Log type defines */
+#define LOG_TYPE_DATA                       0x1
+#define LOG_TYPE_ERROR                      0x2
+#define LOG_TYPE_REQUEST                    0x3
+#define LOG_TYPE_RESPONSE                   0x4
+
+/* Log level defines */
+#define LOG_LEVEL_INFO                      0x1
+#define LOG_LEVEL_STARTUP                   0x2
+#define LOG_LEVEL_SHUTDOWN                  0x3
+#define LOG_LEVEL_CRITICAL                  0x4
 
 SemaphoreHandle_t xUARTSemaphore;
+SemaphoreHandle_t xQueueMutex;
+SemaphoreHandle_t xPedometerDataAvail;
+QueueHandle_t xQueue;
 
 /* System clock rate in Hz */
 uint32_t g_ui32SysClock;
 
+uint32_t gui32IsrCounter;
+
+/* Socket message structure */
+typedef struct
+{
+    uint32_t ui32LogLevel;
+    uint32_t ui32LogType;
+    uint32_t ui32SourceId ;
+    uint32_t ui32StepCount;
+} sock_msg;
 
 /**
  *  @brief UART Init
@@ -127,4 +161,15 @@ void vWritePedometerSensorRegister(uint32_t ui32RegToWrite, uint32_t ui32RegVal)
 
 uint32_t vReadPedometerSensorregister(uint32_t ui32RegToRead);
 
-#endif /* PEDOMETER_TASK_H_ */
+void vUARTTask(void *pvParameters);
+
+int QueueCreate(void);
+
+void UART7Init(void);
+
+//void UARTSendToBBG(char *pucBuffer);
+void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen);
+
+void xPedometerStepCountIntHandler(void);
+
+#endif /* MAIN_H_ */

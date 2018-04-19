@@ -3,6 +3,7 @@
 
 int main(void)
 {
+    int32_t  i32RetVal = -1;
     /* ---------------------------------------------------------------------------------------------------------- */
     /* Configure system clock to be at the max (120 MHz) */
     g_ui32SysClock = MAP_SysCtlClockFreqSet(SYSCTL_XTAL_25MHZ  /* Frequency of external crystal */
@@ -19,6 +20,8 @@ int main(void)
 
     I2C0_Init();
 
+    QueueCreate();
+
     if (CreateTasks() == pdPASS)
     {
         /* Start the scheduler */
@@ -26,8 +29,13 @@ int main(void)
 
         for(;;);
     }
+    else
+    {
+        UARTSend("Task creation failed\r\n");
+        i32RetVal = -1;
+    }
 
-	return 0;
+	return i32RetVal;
 }
 
 void UART0_Init(void)
@@ -76,14 +84,39 @@ void I2C0_Init(void)
     ROM_I2CMasterInitExpClk(I2C_BASE, SYSTEM_CLOCK, true);
 }
 
+int QueueCreate(void)
+{
+    xQueue = xQueueCreate(QUEUE_LENGTH, sizeof(sock_msg));
+    if (xQueue != NULL)
+    {
+        UARTSend("Queue created successfully\r\n");
+
+        xQueueMutex = xSemaphoreCreateMutex();
+        return 0;
+    }
+    else
+    {
+        UARTSend("Queue creation failed\r\n");
+        return -1;
+    }
+}
+
 BaseType_t CreateTasks(void)
 {
-    BaseType_t xRetVal = pdFAIL;
+    BaseType_t xRetVal = pdTRUE;
 
-    if(xTaskCreate(vPedometerTask, "Pedometer_Task", TASK_BUFFER, NULL, 1, NULL) != pdFALSE)
+    if(xTaskCreate(vPedometerTask, "Pedometer_Task", TASK_BUFFER, NULL, 1, NULL) == pdFALSE)
     {
-        UARTSend("Pedometer Task created successfully\r\n");
-        xRetVal = pdPASS;
+        UARTSend("Pedometer Task creation failed\r\n");
+        xRetVal = pdFAIL;
+        return xRetVal;
+    }
+
+    if(xTaskCreate(vUARTTask, "UART_Task", TASK_BUFFER, NULL, 1, NULL) == pdFALSE)
+    {
+        UARTSend("UART Task creation failed\r\n");
+        xRetVal = pdFAIL;
+        return xRetVal;
     }
 
     return xRetVal;
@@ -97,7 +130,7 @@ void UARTSend(uint8_t *pui8MsgStr)
     {
         ui32_str_len = strlen(pui8MsgStr);
 
-        if( xSemaphoreTake( xUARTSemaphore, ( TickType_t ) 10 ) == pdTRUE )
+//        if( xSemaphoreTake( xUARTSemaphore, ( TickType_t ) 10 ) == pdTRUE )
         {
             while (ui32_str_len != 0)
             {
@@ -107,7 +140,7 @@ void UARTSend(uint8_t *pui8MsgStr)
                 pui8MsgStr++;
             }
 
-            xSemaphoreGive( xUARTSemaphore );
+//            xSemaphoreGive( xUARTSemaphore );
         }
     }
 }
@@ -171,10 +204,40 @@ void vPedometerTaskInit(void)
     /* Reset the step count to zero */
     vWritePedometerSensorRegister(PEDOMETER_SENSOR_CTRL10_C_REG, PEDOMETER_SENSOR_STEP_CNT_RST_CFG_VAL);
     UARTSend("Finished resetting step count.\r\n");
+
+#if 1
+    gui32IsrCounter = 0;
+
+    xPedometerDataAvail = xSemaphoreCreateBinary();
+    xSemaphoreTake(xPedometerDataAvail, 0);
+
+    /* Configure GPIO M (PM4) peripheral for INT1 interrupt that will be generated when a step is detected */
+    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+
+    /* Wait until the peripheral is ready */
+    while(!ROM_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM));
+
+    ROM_GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_4);
+
+    GPIOPadConfigSet(GPIO_PORTM_BASE, GPIO_PIN_4,
+                     GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);  // Enable weak pullup resistor for PF4
+
+    GPIOIntDisable(GPIO_PORTM_BASE, GPIO_PIN_4);    // Disable interrupt for PM4
+    GPIOIntClear(GPIO_PORTM_BASE, GPIO_PIN_4);      // Clear pending interrupts for PM4
+
+    /* Register interrupt handler for GPIO pin PM4 */
+    GPIOIntRegister(GPIO_PORTM_BASE, xPedometerStepCountIntHandler);
+
+    /* Enable interrupt detection on rising edge */
+    ROM_GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_RISING_EDGE);
+    ROM_GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_4);     // Enable interrupt for PM4
+
+#endif
 }
 
 void vPedometerTask( void *pvParameters )
 {
+#if 0
     uint8_t status;
     static uint64_t ui64Count = 0;
     static uint64_t ui64ReadCounter = 0;
@@ -182,11 +245,14 @@ void vPedometerTask( void *pvParameters )
     uint8_t step_counter_l;
     uint8_t step_counter_h;
     uint16_t step_counter;
+#endif
 
     uint8_t ui8_msg_str[128];
 
+    /* Initialize the pedometer task */
     vPedometerTaskInit();
 
+#if 0
     for (;;)
     {
         ui64Count++;
@@ -200,25 +266,85 @@ void vPedometerTask( void *pvParameters )
 
             /* Read the step_counter_l register(0x4B) */
             step_counter_l = vReadPedometerSensorregister(PEDOMETER_SENSOR_STEP_COUNTER_L_REG);
-//            UARTSend("step_counter_l is 0x%x\r\n", step_counter_l);
+            //            UARTSend("step_counter_l is 0x%x\r\n", step_counter_l);
 
             /* Read the step_counter_h register(0x4C) */
             step_counter_h = vReadPedometerSensorregister(PEDOMETER_SENSOR_STEP_COUNTER_H_REG);
-//            UARTSend("step_counter_h is 0x%x\r\n", step_counter_h);
+            //            UARTSend("step_counter_h is 0x%x\r\n", step_counter_h);
 
             step_counter = (step_counter_h << 8) | step_counter_l;
 
-            if (ui64ReadCounter % 50 == 0)
+            //            if (ui64ReadCounter % 50 == 0)
             {
                 memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
                 sprintf(ui8_msg_str, "step_counter is 0x%x\r\n", step_counter);
                 UARTSend(ui8_msg_str);
 
-//                uint64_t ui64_idx = 0;
-//                for (ui64_idx = 0; ui64_idx < PEDOMETER_COUNT_PRINT_DELAY; ui64_idx++);
+#if 0
+                /* Wait on */
+                if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
+                {
+                    sock_msg xSockMsg;
+                    memset(&xSockMsg, '\0', sizeof(sock_msg));
+
+                    //                    xSockMsg.eLogLevel = LOG_LEVEL_INFO;
+                    //                    xSockMsg.eLogType = LOG_TYPE_DATA;
+                    //                    xSockMsg.eSourceId = TASK_PEDOMETER;
+                    strcpy(xSockMsg.data, ui8_msg_str);
+
+                    if (xQueueSendToBack(xQueue, &xSockMsg, 10) != pdPASS)
+                    {
+                        UARTSend("Queue Send failed\r\n");
+                    }
+                    xSemaphoreGive(xQueueMutex);
+                }
+#else
+
+                sock_msg xSockMsg;
+                memset(&xSockMsg, '\0', sizeof(xSockMsg));
+
+                xSockMsg.ui32LogLevel = LOG_LEVEL_STARTUP;
+                xSockMsg.ui32LogType = LOG_TYPE_ERROR;
+                xSockMsg.ui32SourceId = TASK_PEDOMETER;
+                strcpy(xSockMsg.data, ui8_msg_str);
+                uint32_t ui32SockMsgLen = sizeof(xSockMsg.ui32LogLevel) + sizeof(xSockMsg.ui32LogType) +
+                        sizeof(xSockMsg.ui32SourceId) + strlen(xSockMsg.data);
+
+                UARTSendToBBG((uint8_t *)&xSockMsg, ui32SockMsgLen);
+#endif
+
+                uint64_t ui64_idx = 0;
+                for (ui64_idx = 0; ui64_idx < PEDOMETER_COUNT_PRINT_DELAY; ui64_idx++);
             }
         }
     }
+#else
+    sock_msg xSockMsg;
+
+    for (;;)
+    {
+        memset(&xSockMsg, '\0', sizeof(xSockMsg));
+        if (xSemaphoreTake(xPedometerDataAvail, portMAX_DELAY))
+        {
+            memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
+//            sprintf(ui8_msg_str, "step counter is %d\r\n", gui32IsrCounter);
+            UARTSend(ui8_msg_str);
+
+            xSockMsg.ui32LogLevel = LOG_LEVEL_STARTUP;
+            xSockMsg.ui32LogType = LOG_TYPE_ERROR;
+            xSockMsg.ui32SourceId = TASK_PEDOMETER;
+            xSockMsg.ui32StepCount = gui32IsrCounter;
+//            strcpy(xSockMsg.data, ui8_msg_str);
+//            uint32_t ui32SockMsgLen = sizeof(xSockMsg.ui32LogLevel) + sizeof(xSockMsg.ui32LogType) +
+//                    sizeof(xSockMsg.ui32SourceId) + strlen(xSockMsg.data);
+            uint32_t ui32SockMsgLen = sizeof(xSockMsg);
+
+            UARTSendToBBG((uint8_t *)&xSockMsg, ui32SockMsgLen);
+        }
+    }
+
+#endif
+
 }
 
 void vWritePedometerSensorRegister(uint32_t ui32RegToWrite, uint32_t ui32RegVal)
@@ -252,4 +378,127 @@ uint32_t vReadPedometerSensorregister(uint32_t ui32RegToRead)
     ui32RegVal = ROM_I2CMasterDataGet(I2C_BASE);
 
     return ui32RegVal;
+}
+
+void xPedometerStepCountIntHandler(void)
+{
+    taskDISABLE_INTERRUPTS();
+    ROM_GPIOIntDisable(GPIO_PORTM_BASE, GPIO_PIN_4);
+    IntMasterDisable();
+    ROM_GPIOIntClear(GPIO_PORTM_BASE, GPIO_PIN_4);  // Clear interrupt flag
+
+    gui32IsrCounter++;
+
+    xSemaphoreGive(xPedometerDataAvail);
+
+    ROM_GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_RISING_EDGE);
+    IntMasterEnable();
+    ROM_GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_4);
+
+    taskENABLE_INTERRUPTS();
+}
+
+void vUARTTask(void *pvParameters)
+{
+    UART7Init();
+    sock_msg xSockMsg;
+    int i = 0;
+
+#if 0
+    for (;;)
+    {
+        SysCtlDelay(pdMS_TO_TICKS(25000));
+//        UARTSendToBBG("UART communication test\r\n");
+//        UARTSendToBBG("ABC");
+
+    }
+#endif
+
+    for(;;)
+    {
+        memset((void*)&xSockMsg,0,sizeof(xSockMsg));
+
+        while(uxQueueSpacesAvailable(xQueue) != QUEUE_LENGTH){
+            if(xSemaphoreTake(xQueueMutex,portMAX_DELAY)){
+                if( xQueueReceive( xQueue, &xSockMsg, portMAX_DELAY ) != pdPASS ){
+                    UARTSend("\ERROR:Queue Receive\r\n");
+                }
+                else{
+//                    UARTSendToBBG((uint8_t *)&xSockMsg);
+//                    SysCtlDelay(pdMS_TO_TICKS(10000));
+                    for(i = 0; i<100000;i++);
+                }
+                xSemaphoreGive(xQueueMutex);
+            }
+        }
+    }
+
+}
+
+void UART7Init(void)
+{
+    // Enable the peripherals.
+    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART7);
+    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+
+    // Set GPIO PB0 and PB1 as UART pins.
+    GPIOPinConfigure(GPIO_PC5_U7TX);
+    GPIOPinConfigure(GPIO_PC4_U7RX);
+    ROM_GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+
+    // Configure the UART for 115200 baud, 8-N-1 operation.
+    ROM_UARTConfigSetExpClk(UART7_BASE, 120000000, 115200,
+                            (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
+                                    UART_CONFIG_PAR_NONE));
+
+    ROM_IntEnable(INT_UART7);
+    ROM_UARTIntEnable(UART7_BASE, UART_INT_RX | UART_INT_RT);
+
+//    UARTLoopbackEnable(UART7_BASE);
+}
+
+void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen)
+{
+    if (pucBuffer != NULL)
+    {
+//        uint32_t ui32BufLen = strlen(pucBuffer);
+//        uint32_t ui32BufLen = sizeof(sock_msg);
+
+        while(ui32BufLen)
+        {
+//            UARTCharPut(UART7_BASE, *pucBuffer);
+            ROM_UARTCharPutNonBlocking(UART7_BASE, *pucBuffer);
+            pucBuffer++;
+            ui32BufLen--;
+        }
+    }
+}
+
+void UARTIntHandler(void)
+{
+    uint32_t ui32Status;
+
+    //
+    // Get the interrupt status.
+    //
+    ui32Status = ROM_UARTIntStatus(UART7_BASE, true);
+
+    //
+    // Clear the asserted interrupts.
+    //
+    ROM_UARTIntClear(UART7_BASE, ui32Status);
+
+    //
+    // Loop while there are characters in the receive FIFO.
+    //
+    while(ROM_UARTCharsAvail(UART7_BASE))
+    {
+        //
+        // Read the next character from the UART and write it back to the UART.
+        //
+//        UARTprintf(ROM_UARTCharGetNonBlocking(UART7_BASE));
+        uint8_t ui8CharToSend;
+        sprintf(&ui8CharToSend, "%c", ROM_UARTCharGetNonBlocking(UART7_BASE));
+        UARTSend(&ui8CharToSend);
+    }
 }
