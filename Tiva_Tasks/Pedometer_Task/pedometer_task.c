@@ -205,7 +205,6 @@ void vPedometerTaskInit(void)
     vWritePedometerSensorRegister(PEDOMETER_SENSOR_CTRL10_C_REG, PEDOMETER_SENSOR_STEP_CNT_RST_CFG_VAL);
     UARTSend("Finished resetting step count.\r\n");
 
-#if 1
     gui32IsrCounter = 0;
 
     xPedometerDataAvail = xSemaphoreCreateBinary();
@@ -231,8 +230,6 @@ void vPedometerTaskInit(void)
     /* Enable interrupt detection on rising edge */
     ROM_GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_RISING_EDGE);
     ROM_GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_4);     // Enable interrupt for PM4
-
-#endif
 }
 
 void vPedometerTask( void *pvParameters )
@@ -330,16 +327,20 @@ void vPedometerTask( void *pvParameters )
 //            sprintf(ui8_msg_str, "step counter is %d\r\n", gui32IsrCounter);
             UARTSend(ui8_msg_str);
 
-            xSockMsg.ui32LogLevel = LOG_LEVEL_STARTUP;
-            xSockMsg.ui32LogType = LOG_TYPE_ERROR;
+            xSockMsg.ui32LogLevel = LOG_LEVEL_INFO;
+            xSockMsg.ui32LogType = LOG_TYPE_DATA;
             xSockMsg.ui32SourceId = TASK_PEDOMETER;
             xSockMsg.ui32StepCount = gui32IsrCounter;
-//            strcpy(xSockMsg.data, ui8_msg_str);
-//            uint32_t ui32SockMsgLen = sizeof(xSockMsg.ui32LogLevel) + sizeof(xSockMsg.ui32LogType) +
-//                    sizeof(xSockMsg.ui32SourceId) + strlen(xSockMsg.data);
-            uint32_t ui32SockMsgLen = sizeof(xSockMsg);
 
-            UARTSendToBBG((uint8_t *)&xSockMsg, ui32SockMsgLen);
+            /* Push the data to be sent via UART to the queue */
+            if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
+            {
+                if (xQueueSendToBack(xQueue, &xSockMsg, 10) != pdPASS)
+                {
+                    UARTSend("Queue Send failed\r\n");
+                }
+                xSemaphoreGive(xQueueMutex);
+            }
         }
     }
 
@@ -402,17 +403,6 @@ void vUARTTask(void *pvParameters)
 {
     UART7Init();
     sock_msg xSockMsg;
-    int i = 0;
-
-#if 0
-    for (;;)
-    {
-        SysCtlDelay(pdMS_TO_TICKS(25000));
-//        UARTSendToBBG("UART communication test\r\n");
-//        UARTSendToBBG("ABC");
-
-    }
-#endif
 
     for(;;)
     {
@@ -424,9 +414,7 @@ void vUARTTask(void *pvParameters)
                     UARTSend("\ERROR:Queue Receive\r\n");
                 }
                 else{
-//                    UARTSendToBBG((uint8_t *)&xSockMsg);
-//                    SysCtlDelay(pdMS_TO_TICKS(10000));
-                    for(i = 0; i<100000;i++);
+                    UARTSendToBBG((uint8_t *)&xSockMsg, sizeof(xSockMsg));
                 }
                 xSemaphoreGive(xQueueMutex);
             }
@@ -451,8 +439,8 @@ void UART7Init(void)
                             (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
                                     UART_CONFIG_PAR_NONE));
 
-    ROM_IntEnable(INT_UART7);
-    ROM_UARTIntEnable(UART7_BASE, UART_INT_RX | UART_INT_RT);
+//    ROM_IntEnable(INT_UART7);
+//    ROM_UARTIntEnable(UART7_BASE, UART_INT_RX | UART_INT_RT);
 
 //    UARTLoopbackEnable(UART7_BASE);
 }
@@ -461,9 +449,6 @@ void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen)
 {
     if (pucBuffer != NULL)
     {
-//        uint32_t ui32BufLen = strlen(pucBuffer);
-//        uint32_t ui32BufLen = sizeof(sock_msg);
-
         while(ui32BufLen)
         {
 //            UARTCharPut(UART7_BASE, *pucBuffer);
@@ -478,24 +463,16 @@ void UARTIntHandler(void)
 {
     uint32_t ui32Status;
 
-    //
-    // Get the interrupt status.
-    //
+    /* Get the interrupt status. */
     ui32Status = ROM_UARTIntStatus(UART7_BASE, true);
 
-    //
-    // Clear the asserted interrupts.
-    //
+    /* Clear the asserted interrupts. */
     ROM_UARTIntClear(UART7_BASE, ui32Status);
 
-    //
-    // Loop while there are characters in the receive FIFO.
-    //
+    /* Loop while there are characters in the receive FIFO. */
     while(ROM_UARTCharsAvail(UART7_BASE))
     {
-        //
-        // Read the next character from the UART and write it back to the UART.
-        //
+        /* Read the next character from the UART and write it back to the UART. */
 //        UARTprintf(ROM_UARTCharGetNonBlocking(UART7_BASE));
         uint8_t ui8CharToSend;
         sprintf(&ui8CharToSend, "%c", ROM_UARTCharGetNonBlocking(UART7_BASE));
