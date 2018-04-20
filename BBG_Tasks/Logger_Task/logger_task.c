@@ -402,15 +402,36 @@ void sig_handler(int sig_num)
         g_sig_kill_sock_hb_thread = 1;
 
         /* TODO: Add code to flush all the messages to the log file */
+        flush_logger_mq();
         
         //pthread_join(sensor_thread_id, NULL);
         //pthread_join(socket_thread_id, NULL);
         //pthread_join(socket_hb_thread_id, NULL);
         
-        mq_close(logger_mq_handle);
+        //mq_close(logger_mq_handle);
+        logger_task_exit();
         
         exit(0);
     }
+}
+
+void flush_logger_mq(void)
+{
+    struct mq_attr logger_mq_attr;
+
+    mq_getattr(logger_mq_handle, &logger_mq_attr);
+
+    /* Check the number of messages left on logger task message queue */
+    long num_msgs_left = logger_mq_attr.msg_qnum;
+
+    printf("Num of messages left on logger message queue: %ld\n", num_msgs_left);
+
+    while(num_msgs_left--)
+    {
+        /* Read from message queue and write the message to log file */
+        read_from_logger_msg_queue();
+    }
+
 }
 
 void logger_task_exit(void)

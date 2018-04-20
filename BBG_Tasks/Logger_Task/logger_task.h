@@ -198,6 +198,18 @@ void write_test_msg_to_logger();
 void read_from_logger_msg_queue(void);
 
 /**
+ *  @brief Flush logger message queue
+ *
+ *  This function will check the logger task message queue and flush the messages to 
+ *  the log file
+ *
+ *  @param void
+ *
+ *  @return void
+*/
+void flush_logger_mq(void);
+
+/**
  *  @brief Cleanup of the logger sensor
  *
  *  This function will close the message queue and the logger file handle 
