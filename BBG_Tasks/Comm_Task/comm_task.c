@@ -39,6 +39,7 @@ int main(void)
 
     g_sig_kill_comm_thread = 0;
     g_sig_kill_sock_hb_thread = 0;
+    gb_waiting_for_ext_app_uart_rsp = false;
 
     pthread_join(comm_thread_id, NULL);
     pthread_join(socket_hb_thread_id, NULL);
@@ -107,7 +108,9 @@ int create_threads(void)
 void *comm_thread_func(void *arg)
 {
     sock_msg x_sock_data_rcvd;
-    
+    char ext_app_rsp_msg[32];
+    size_t sent_bytes;
+
     while(!g_sig_kill_comm_thread)
     {
         memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
@@ -121,11 +124,30 @@ void *comm_thread_func(void *arg)
             printf("Log Type:%d\n", x_sock_data_rcvd.log_type);
             printf("Source ID:%d\n", x_sock_data_rcvd.source_id);
             printf("Step count is:%d\n",x_sock_data_rcvd.data);
-#endif   
-            post_data_to_logger_task_queue(x_sock_data_rcvd);
+#endif  
+            if (gb_waiting_for_ext_app_uart_rsp == true)
+            {
+                gb_waiting_for_ext_app_uart_rsp = false;
+                if (x_sock_data_rcvd.source_id == TASK_PEDOMETER)
+                {
+                    sprintf(ext_app_rsp_msg, "Step count: %d\n", x_sock_data_rcvd.data);
+                }
+                else if (x_sock_data_rcvd.source_id == TASK_HUMIDITY)
+                {
+                    sprintf(ext_app_rsp_msg, "Humidity data: %d\n", x_sock_data_rcvd.data);
+                }
+
+                sent_bytes = send(accept_conn_id, ext_app_rsp_msg, strlen(ext_app_rsp_msg), 0);
+
+            }
+            else
+            {
+                post_data_to_logger_task_queue(x_sock_data_rcvd);
             
-            post_data_to_decision_task_queue(x_sock_data_rcvd);
+                post_data_to_decision_task_queue(x_sock_data_rcvd);
+            }
         }
+
 #endif
     }
 
@@ -187,17 +209,17 @@ void *ext_app_int_thread_func(void *arg)
 	char buffer[BUFF_SIZE];
     size_t sent_bytes;
     
-    int accept_conn_id;
-    /* Wait for request from external application */
-    if ((accept_conn_id = accept(server_sockfd, (struct sockaddr *)&server_addr, 
-                    (socklen_t *)&serv_addr_len)) < 0)
-    {
-        perror("accept");
-    }
 
     char recv_buffer[BUFF_SIZE];
 	while(!g_sig_kill_ext_app_sock_int_thread)
     {
+        /* Wait for request from external application */
+        if ((accept_conn_id = accept(server_sockfd, (struct sockaddr *)&server_addr, 
+                        (socklen_t *)&serv_addr_len)) < 0)
+        {
+            perror("accept");
+        }
+        
         memset(recv_buffer, '\0', sizeof(recv_buffer));
         int num_recv_bytes = recv(accept_conn_id, recv_buffer, sizeof(recv_buffer), 0);
         if (num_recv_bytes < 0)
@@ -208,16 +230,41 @@ void *ext_app_int_thread_func(void *arg)
         else
         {
             /* Handle external application request here */
-            if (*(((struct _socket_req_msg_struct_ *)&recv_buffer)->req_api_msg) != '\0')
+            if (*(((struct _ext_app_req_msg_struct_ *)&recv_buffer)->req_api_msg) != '\0')
             {
                 printf("Message req api: %s, req recp: %s, req api params: %d\n",
-                        (((struct _socket_req_msg_struct_ *)&recv_buffer)->req_api_msg),
-                        ((((struct _socket_req_msg_struct_ *)&recv_buffer)->req_recipient) 
-                         == REQ_RECP_TEMP_TASK ? "Temp Task" : "Light Task"),
-                        (((struct _socket_req_msg_struct_ *)&recv_buffer)->params));
+                        (((struct _ext_app_req_msg_struct_ *)&recv_buffer)->req_api_msg),
+                        (((((struct _ext_app_req_msg_struct_ *)&recv_buffer)->req_recipient) 
+                         == TASK_PEDOMETER) ? "Pedometer Task" : "Humidity Task"),
+                        (((struct _ext_app_req_msg_struct_ *)&recv_buffer)->params));
 
-                strncpy(buffer, "Test Response!", strlen("Test Response!"));
-                sent_bytes = send(accept_conn_id, buffer, strlen(buffer), 0);
+                // strncpy(buffer, "Test Response!", strlen("Test Response!"));
+                // sent_bytes = send(accept_conn_id, buffer, strlen(buffer), 0);
+                
+                if ((((struct _ext_app_req_msg_struct_ *)&recv_buffer)->req_recipient)
+                        == TASK_PEDOMETER)
+                {
+                    /* We will call a UART_Send here to send the external application request
+                     * to Tiva and set the flag gb_waiting_for_ext_app_uart_rsp to true to
+                     * make the comm_thread wait for response */
+                
+                    if (write(uart4_fd, (char *)&recv_buffer, sizeof(struct _ext_app_req_msg_struct_)) > 0)
+                    {
+                        printf("Sent request to Tiva\n");
+                        gb_waiting_for_ext_app_uart_rsp = true;
+                    }
+
+                }
+                else if ((((struct _ext_app_req_msg_struct_ *)&recv_buffer)->req_recipient) 
+                        == TASK_HUMIDITY)
+                {
+                    if (write(uart4_fd, (char *)&recv_buffer, sizeof(struct _ext_app_req_msg_struct_)) > 0)
+                    {
+                        printf("Sent request to Tiva\n");
+                        gb_waiting_for_ext_app_uart_rsp = true;
+                    }
+
+                }
             }
         }
     }

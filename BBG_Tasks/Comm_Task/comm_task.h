@@ -12,6 +12,7 @@
 /*---------------------------------- INCLUDES -------------------------------*/
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
@@ -59,6 +60,11 @@
 #define BUFF_SIZE                           1024
 
 #define LOGGER_ATTR_LEN                     32
+
+/* Source ID definations */
+#define TASK_PEDOMETER                      0x1
+#define TASK_HUMIDITY                       0x2
+
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
@@ -67,7 +73,7 @@ pthread_t comm_thread_id, socket_hb_thread_id, ext_app_int_thread_id;
 
 sig_atomic_t g_sig_kill_comm_thread, g_sig_kill_sock_hb_thread, g_sig_kill_ext_app_sock_int_thread;
 
-int server_sockfd;
+int server_sockfd, accept_conn_id;
 struct sockaddr_in server_addr;
 int comm_task_initialized;
 
@@ -76,6 +82,8 @@ int comm_task_initialized;
 struct termios *uart4_config;
 char *uart4_port = "/dev/ttyO4";
 int uart4_fd;
+
+bool gb_waiting_for_ext_app_uart_rsp;
 #endif
 
 /*---------------------------------- GLOBALS --------------------------------*/
@@ -90,18 +98,11 @@ typedef struct
 	uint32_t data;
 } sock_msg;
 
-/* Message structure for request messages from external application */
-enum _req_recipient_
+struct _ext_app_req_msg_struct_
 {
-    REQ_RECP_TEMP_TASK,
-    REQ_RECP_LIGHT_TASK
-};
-
-struct _socket_req_msg_struct_
-{
-    char req_api_msg[SOCK_REQ_MSG_API_MSG_LEN];
-    enum _req_recipient_ req_recipient;
+    int req_recipient;
     int params;
+    char req_api_msg[SOCK_REQ_MSG_API_MSG_LEN];
 };
 
 struct _logger_msg_struct_

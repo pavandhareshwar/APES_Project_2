@@ -1,6 +1,6 @@
 /*************************************************************************
 * Author:       Pavan Dhareshwar & Sridhar Pavithrapu
-* Date:         03/10/2018
+* Date:         04/23/2018
 * File:         external_app.h
 * Description:  Header file containing the macros, structs/enums, globals
                 and function prototypes for source file external_app.c
@@ -30,6 +30,9 @@
 
 #define SOCK_REQ_MSG_API_MSG_LEN             64
 
+#define REQ_RECP_PEDOMETER_TASK              0x1 
+#define REQ_RECP_HUMIDITY_TASK               0x2
+
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
@@ -37,17 +40,11 @@
 /*---------------------------------- GLOBALS --------------------------------*/
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
-enum _req_recipient_
-{   
-    REQ_RECP_PEDOMETER_TASK, 
-    REQ_RECP_HUMIDITY_TASK
-};  
-    
 struct _ext_app_req_msg_struct_
 {
-    char req_api_msg[SOCK_REQ_MSG_API_MSG_LEN];
-    enum _req_recipient_ req_recipient;
+    int req_recipient;
     int params;
+    char req_api_msg[SOCK_REQ_MSG_API_MSG_LEN];
 };
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
