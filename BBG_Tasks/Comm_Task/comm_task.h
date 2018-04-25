@@ -37,28 +37,38 @@
 /*---------------------------------- INCLUDES -------------------------------*/
 
 /*----------------------------------- MACROS --------------------------------*/
-#define USE_UART_FOR_COMM                    1
+#define USE_UART_FOR_COMM                   1
 
 // Message queue attribute macros 
-#define MSG_QUEUE_MAX_NUM_MSGS               5
-#define MSG_QUEUE_MAX_MSG_SIZE               1024
-#define LOGGER_MSG_QUEUE_NAME                "/logger_task_mq"
-#define DECISION_MSG_QUEUE_NAME              "/decision_task_mq"
+#define MSG_QUEUE_MAX_NUM_MSGS              5
+#define MSG_QUEUE_MAX_MSG_SIZE              1024
+#define LOGGER_MSG_QUEUE_NAME               "/logger_task_mq"
+#define DECISION_MSG_QUEUE_NAME             "/decision_task_mq"
 
-#define MSG_MAX_LEN                          128
-#define MSG_BUFF_MAX_LEN                     1024
+#define MSG_MAX_LEN                         128
+#define MSG_BUFF_MAX_LEN                    1024
 
-#define SOCKET_HB_PORT_NUM                   8660
-#define SOCKET_HB_LISTEN_QUEUE_SIZE          10
+#define SOCKET_HB_PORT_NUM                  8660
+#define SOCKET_HB_LISTEN_QUEUE_SIZE         10
 
+#define SERVER_PORT_NUM 			        8500
+#define SERVER_LISTEN_QUEUE_SIZE	        100
+
+#define SOCK_REQ_MSG_API_MSG_LEN            64
+
+#define BUFF_SIZE                           1024
+
+#define LOGGER_ATTR_LEN                     32
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
 mqd_t logger_mq_handle, decision_mq_handle;
-pthread_t comm_thread_id, socket_hb_thread_id;
+pthread_t comm_thread_id, socket_hb_thread_id, ext_app_int_thread_id;
 
-sig_atomic_t g_sig_kill_comm_thread, g_sig_kill_sock_hb_thread;
+sig_atomic_t g_sig_kill_comm_thread, g_sig_kill_sock_hb_thread, g_sig_kill_ext_app_sock_int_thread;
 
+int server_sockfd;
+struct sockaddr_in server_addr;
 int comm_task_initialized;
 
 #ifdef USE_UART_FOR_COMM
@@ -79,6 +89,27 @@ typedef struct
     uint32_t source_id;
 	uint32_t data;
 } sock_msg;
+
+/* Message structure for request messages from external application */
+enum _req_recipient_
+{
+    REQ_RECP_TEMP_TASK,
+    REQ_RECP_LIGHT_TASK
+};
+
+struct _socket_req_msg_struct_
+{
+    char req_api_msg[SOCK_REQ_MSG_API_MSG_LEN];
+    enum _req_recipient_ req_recipient;
+    int params;
+};
+
+struct _logger_msg_struct_
+{
+    char message[MSG_MAX_LEN];
+    char logger_msg_src_id[LOGGER_ATTR_LEN];
+    char logger_msg_level[LOGGER_ATTR_LEN];
+};
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
 
@@ -124,6 +155,19 @@ void *comm_thread_func(void *arg);
  *
  */
 void *socket_hb_thread_func(void *arg);
+
+/**
+ *  @brief Entry point and executing entity for external application socket interface thread
+ *
+ *  The external application socket interface thread starts execution by invoking this 
+ *  function(start_routine)
+ *
+ *  @param arg : argument to start_routine
+ *
+ *  @return void
+ *
+ */
+void *ext_app_int_thread_func(void *arg);
 
 /**
  *  @brief Create the socket and initialize
@@ -175,6 +219,24 @@ void config_uart_port(struct termios *uart_conf, int uart_desc);
  */
 void uart4_init(void);
 #endif
+
+/**
+ *  @brief Initialize server socket
+ *
+ *  For an external application to communicate with the system, the socket
+ *  task creates and listens on a socket for messages exposed to the external
+ *  application. This function creates, binds and makes the socket task listen
+ *  on this socket for messages from external application
+ *
+ *  @param sock_addr_struct        : sockaddr_in structre pointer
+ *  @param port_num                : port number associated with the socket
+ *  @param listen_queue_size       : backlog argument for listen system call
+ *
+ *  @return void
+ *
+ */
+void initialize_server_socket(struct sockaddr_in *sock_addr_struct, 
+                                int port_num, int listen_queue_size);
 
 /**
  *  @brief Post data to logger task message queue

@@ -70,6 +70,9 @@ int comm_task_init(void)
     uart4_init();
 #endif
 
+    /* Creating a socket that is exposed to the external application */
+    initialize_server_socket(&server_addr, SERVER_PORT_NUM, SERVER_LISTEN_QUEUE_SIZE);
+
     comm_task_initialized = 1;
 
     return 0;
@@ -88,6 +91,13 @@ int create_threads(void)
     if (sock_hb_t_creat_ret_val)
     {
         perror("Socket heartbeat thread creation failed");
+        return -1;
+    }
+
+    int ext_app_int_t_creat_ret_val = pthread_create(&ext_app_int_thread_id, NULL, &ext_app_int_thread_func, NULL);
+    if (ext_app_int_t_creat_ret_val)
+    {
+        perror("External Application socket interface thread creation failed\n");
         return -1;
     }
 
@@ -171,6 +181,50 @@ void *socket_hb_thread_func(void *arg)
     }
 }
 
+void *ext_app_int_thread_func(void *arg)
+{
+    int serv_addr_len = sizeof(server_addr);
+	char buffer[BUFF_SIZE];
+    size_t sent_bytes;
+    
+    int accept_conn_id;
+    /* Wait for request from external application */
+    if ((accept_conn_id = accept(server_sockfd, (struct sockaddr *)&server_addr, 
+                    (socklen_t *)&serv_addr_len)) < 0)
+    {
+        perror("accept");
+    }
+
+    char recv_buffer[BUFF_SIZE];
+	while(!g_sig_kill_ext_app_sock_int_thread)
+    {
+        memset(recv_buffer, '\0', sizeof(recv_buffer));
+        int num_recv_bytes = recv(accept_conn_id, recv_buffer, sizeof(recv_buffer), 0);
+        if (num_recv_bytes < 0)
+        {
+            printf("recv failed in socket task\n");
+            perror("recv failed");
+        }
+        else
+        {
+            /* Handle external application request here */
+            if (*(((struct _socket_req_msg_struct_ *)&recv_buffer)->req_api_msg) != '\0')
+            {
+                printf("Message req api: %s, req recp: %s, req api params: %d\n",
+                        (((struct _socket_req_msg_struct_ *)&recv_buffer)->req_api_msg),
+                        ((((struct _socket_req_msg_struct_ *)&recv_buffer)->req_recipient) 
+                         == REQ_RECP_TEMP_TASK ? "Temp Task" : "Light Task"),
+                        (((struct _socket_req_msg_struct_ *)&recv_buffer)->params));
+
+                strncpy(buffer, "Test Response!", strlen("Test Response!"));
+                sent_bytes = send(accept_conn_id, buffer, strlen(buffer), 0);
+            }
+        }
+    }
+
+    pthread_exit(NULL);
+}
+
 void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,
                int port_num, int listen_qsize)
 {
@@ -252,6 +306,43 @@ void uart4_init(void)
     }
 }
 #endif
+
+void initialize_server_socket(struct sockaddr_in *sock_addr_struct, 
+                                int port_num, int listen_queue_size)
+{
+	/* Create server socket */ 
+	if ((server_sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+	{
+		perror("socket failed");
+		exit(EXIT_FAILURE);
+	}	
+
+    int option = 1;
+    if(setsockopt(server_sockfd, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR),
+                    (char*)&option,sizeof(option)) < 0)
+    {
+        printf("setsockopt failed\n");
+        close(server_sockfd);
+        exit(EXIT_FAILURE);
+    }
+
+    sock_addr_struct->sin_family = AF_INET;
+	sock_addr_struct->sin_addr.s_addr = INADDR_ANY;
+	sock_addr_struct->sin_port = htons(port_num);
+
+	if (bind(server_sockfd, (struct sockaddr *)sock_addr_struct, 
+							sizeof(struct sockaddr_in))<0)
+	{
+		perror("bind failed");
+		exit(EXIT_FAILURE);
+	}
+
+	if (listen(server_sockfd, listen_queue_size) < 0)
+	{
+		perror("listen");
+		exit(EXIT_FAILURE);
+	}
+}
 
 void post_data_to_logger_task_queue(sock_msg x_sock_data)
 {
