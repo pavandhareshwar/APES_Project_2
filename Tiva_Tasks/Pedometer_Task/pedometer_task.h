@@ -37,7 +37,7 @@
 /* Macros section */
 
 #define SYSTEM_CLOCK                        120000000U /* System clock rate, 120 MHz */
-#define TASK_BUFFER                         1024
+#define TASK_BUFFER_SIZE                    1024
 #define SLAVE_ADDR                          0b1101010
 #define SLAVE_ADDR_WRITE                    0b11010100
 #define SLAVE_ADDR_READ                     0b11010101
@@ -111,7 +111,7 @@ typedef struct
     uint32_t ui32LogLevel;
     uint32_t ui32LogType;
     uint32_t ui32SourceId ;
-    uint32_t ui32StepCount;
+    uint32_t ui32Data;
 } sock_msg;
 
 typedef struct
@@ -124,7 +124,7 @@ typedef struct
 /**
  *  @brief UART Init
  *
- *  This function will perform the system level initialization of UART
+ *  This function will perform the system level initialization of UART0
  *
  *  @param      void
  *
@@ -160,23 +160,124 @@ BaseType_t CreateTasks(void);
  */
 void UARTSend(uint8_t *pui8MsgStr);
 
+/**
+ *  @brief Pedometer task init function
+ *
+ *  This function will initialize the pedometer sensor to start giving out
+ *  step count values
+ *
+ *  @param      void
+ *
+ *  @return     void
+ */
 void vPedometerTaskInit(void);
 
+/**
+ *  @brief Pedometer task
+ *
+ *  This function will serve as the pedometer task that waits for the pedometer
+ *  data to become available and log it to the common queue
+ *
+ *  @param      pvParameters : pointer to task parameters
+ *
+ *  @return     void
+ */
 void vPedometerTask( void *pvParameters );
 
+/**
+ *  @brief Pedometer sensor write function
+ *
+ *  This function will write the pedometer sensor registers with the value
+ *  specified in @param ui32RegVal
+ *
+ *  @param      ui32RegToWrite  : register to write
+ *  @param      ui32RegVal      : value to write
+ *
+ *  @return     void
+ */
 void vWritePedometerSensorRegister(uint32_t ui32RegToWrite, uint32_t ui32RegVal);
 
+/**
+ *  @brief Pedometer sensor read function
+ *
+ *  This function will read the pedometer sensor registers and return the value
+ *
+ *  @param      ui32RegToRead  : register to read
+ *
+ *  @return     ui32RegVal      : value read
+ */
 uint32_t vReadPedometerSensorregister(uint32_t ui32RegToRead);
 
-void vUARTTask(void *pvParameters);
+/**
+ *  @brief UART writer task
+ *
+ *  This function will serve as the UART writer task that will read the message
+ *  from the queue and send it to BBG via UART
+ *
+ *  @param      pvParameters : pointer to task parameters
+ *
+ *  @return     void
+ */
+void vUARTWriterTask(void *pvParameters);
 
+/**
+ *  @brief UART reader task
+ *
+ *  This function will serve as the UART reader task that will wait for requests
+ *  from BBG over UART
+ *
+ *  @param      pvParameters : pointer to task parameters
+ *
+ *  @return     void
+ */
+void vUARTReaderTask(void *pvParameters);
+
+/**
+ *  @brief Creates a queue
+ *
+ *  This function will create the common queue used between the different
+ *  tasks
+ *
+ *  @param      void
+ *
+ *  @return     void
+ */
 int QueueCreate(void);
 
+/**
+ *  @brief UART Init
+ *
+ *  This function will perform the system level initialization of UART7
+ *
+ *  @param      void
+ *
+ *  @return     void
+ */
 void UART7Init(void);
 
-//void UARTSendToBBG(char *pucBuffer);
+/**
+ *  @brief UART send function
+ *
+ *  This function will write to UART7 interface that connects Tiva with
+ *  BBG to transfer data between the two entities
+ *
+ *  @param      pucBuffer : pointer to data buffer
+ *  @param      ui32BufLen: data length
+ *
+ *  @return     void
+ */
 void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen);
 
+/**
+ *  @brief Pedometer interrupt handler
+ *
+ *  This function will serve as the interrupt handler for INT1 interrupt
+ *  of pedometer sensor that will be triggered when a step is detected
+ *
+ *  @param      void
+ *
+ *  @return     void
+ */
 void xPedometerStepCountIntHandler(void);
 
 #endif /* MAIN_H_ */
