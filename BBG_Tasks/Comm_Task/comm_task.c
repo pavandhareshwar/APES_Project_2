@@ -75,7 +75,7 @@ int comm_task_init(void)
      * in communication thread 
      */
     sem_init(&sem_ext_app_req_rsp, 0, 0);
-    sem_init(&sem_sock_msg_shared, 0, 0);
+    sem_init(&sem_sock_msg_shared, 0, 1);
 
 #endif
 
@@ -212,17 +212,16 @@ void *ext_app_int_thread_func(void *arg)
 	char buffer[BUFF_SIZE];
     size_t sent_bytes;
     
+    /* Wait for request from external application */
+    if ((accept_conn_id = accept(server_sockfd, (struct sockaddr *)&server_addr, 
+                    (socklen_t *)&serv_addr_len)) < 0)
+    {
+        perror("accept");
+    }
 
     char recv_buffer[BUFF_SIZE];
 	while(!g_sig_kill_ext_app_sock_int_thread)
     {
-        /* Wait for request from external application */
-        if ((accept_conn_id = accept(server_sockfd, (struct sockaddr *)&server_addr, 
-                        (socklen_t *)&serv_addr_len)) < 0)
-        {
-            perror("accept");
-        }
-        
         memset(recv_buffer, '\0', sizeof(recv_buffer));
         int num_recv_bytes = recv(accept_conn_id, recv_buffer, sizeof(recv_buffer), 0);
         if (num_recv_bytes < 0)
