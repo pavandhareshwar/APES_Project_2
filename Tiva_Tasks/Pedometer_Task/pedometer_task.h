@@ -95,7 +95,7 @@
 #define LOG_LEVEL_SHUTDOWN                  0x3
 #define LOG_LEVEL_CRITICAL                  0x4
 
-SemaphoreHandle_t xUARTSemaphore;
+SemaphoreHandle_t xUARTSemaphore, xUARTToBBGSemaphore;
 SemaphoreHandle_t xQueueMutex;
 SemaphoreHandle_t xPedometerDataAvail;
 QueueHandle_t xQueue;
@@ -113,6 +113,13 @@ typedef struct
     uint32_t ui32SourceId ;
     uint32_t ui32StepCount;
 } sock_msg;
+
+typedef struct
+{
+    int req_recipient;
+    int params;
+    char rq_msg[16];
+}bbg_req_msg;
 
 /**
  *  @brief UART Init

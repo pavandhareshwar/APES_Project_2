@@ -1,5 +1,5 @@
 /* Headers Section */
-#include "pedometer_task.h"
+#include "main.h"
 
 int main(void)
 {
@@ -327,7 +327,7 @@ void vPedometerTask( void *pvParameters )
 //            sprintf(ui8_msg_str, "step counter is %d\r\n", gui32IsrCounter);
             UARTSend(ui8_msg_str);
 
-            xSockMsg.ui32LogLevel = LOG_LEVEL_INFO;
+            xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
             xSockMsg.ui32LogType = LOG_TYPE_DATA;
             xSockMsg.ui32SourceId = TASK_PEDOMETER;
             xSockMsg.ui32StepCount = gui32IsrCounter;
@@ -335,7 +335,7 @@ void vPedometerTask( void *pvParameters )
             /* Push the data to be sent via UART to the queue */
             if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
             {
-                if (xQueueSendToBack(xQueue, &xSockMsg, 10) != pdPASS)
+                if (xQueueSendToBack(xQueue, &xSockMsg, portMAX_DELAY) != pdPASS)
                 {
                     UARTSend("Queue Send failed\r\n");
                 }
@@ -406,7 +406,9 @@ void vUARTTask(void *pvParameters)
 
     for(;;)
     {
+#if 1
         memset((void*)&xSockMsg,0,sizeof(xSockMsg));
+
 
         while(uxQueueSpacesAvailable(xQueue) != QUEUE_LENGTH){
             if(xSemaphoreTake(xQueueMutex,portMAX_DELAY)){
@@ -419,8 +421,56 @@ void vUARTTask(void *pvParameters)
                 xSemaphoreGive(xQueueMutex);
             }
         }
-    }
+#endif
 
+        uint32_t size = 28;
+        uint8_t buffer[32];
+        int i = 0;
+        char ui8CharToSend;
+
+        while(UARTCharsAvail(UART7_BASE))
+        {
+            memset(buffer, '\0', sizeof(buffer));
+            size = 28;
+            i = 0;
+
+            while(size--)
+            {
+                /* Read the next character from the UART and write it back to the UART. */
+//                UARTprintf(ROM_UARTCharGetNonBlocking(UART7_BASE));
+                sprintf(&ui8CharToSend, "%c", (char)UARTCharGet(UART7_BASE));
+                buffer[i++] = ui8CharToSend;
+//                UARTSend(&ui8CharToSend);
+//                UARTCharPutNonBlocking(UART0_BASE, (char)UARTCharGet(UART7_BASE));
+            }
+
+            uint8_t printMsg[32];
+            memset(printMsg, '\0', sizeof(printMsg));
+            sprintf(printMsg, "Req Recipient: %d\r\n", ((bbg_req_msg *)buffer)->req_recipient);
+            UARTSend(printMsg);
+
+            memset(printMsg, '\0', sizeof(printMsg));
+            sprintf(printMsg, "Params: %d\r\n", ((bbg_req_msg *)buffer)->params);
+            UARTSend(printMsg);
+
+            memset(printMsg, '\0', sizeof(printMsg));
+            sprintf(printMsg, "Req Msg: %s\r\n", ((bbg_req_msg *)buffer)->rq_msg);
+            UARTSend(printMsg);
+
+            sock_msg xSockMsg1;
+            memset((void*)&xSockMsg1, 0, sizeof(xSockMsg1));
+
+            xSockMsg1.ui32LogLevel = LOG_LEVEL_CRITICAL;
+            xSockMsg1.ui32LogType = LOG_TYPE_DATA;
+            xSockMsg1.ui32SourceId = TASK_PEDOMETER;
+            xSockMsg1.ui32StepCount = gui32IsrCounter;
+
+            vTaskDelay(pdMS_TO_TICKS(500));
+
+            UARTSendToBBG((uint8_t *)&xSockMsg1, sizeof(xSockMsg1));
+
+        }
+    }
 }
 
 void UART7Init(void)
@@ -443,19 +493,26 @@ void UART7Init(void)
 //    ROM_UARTIntEnable(UART7_BASE, UART_INT_RX | UART_INT_RT);
 
 //    UARTLoopbackEnable(UART7_BASE);
+
+    xUARTToBBGSemaphore = xSemaphoreCreateMutex();
 }
 
 void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen)
 {
     if (pucBuffer != NULL)
     {
-        while(ui32BufLen)
+        if( xSemaphoreTake( xUARTToBBGSemaphore, ( TickType_t ) 10 ) == pdTRUE )
         {
-//            UARTCharPut(UART7_BASE, *pucBuffer);
-            ROM_UARTCharPutNonBlocking(UART7_BASE, *pucBuffer);
-            pucBuffer++;
-            ui32BufLen--;
+            while(ui32BufLen)
+            {
+//                UARTCharPut(UART7_BASE, *pucBuffer);
+                ROM_UARTCharPutNonBlocking(UART7_BASE, *pucBuffer);
+                pucBuffer++;
+                ui32BufLen--;
+            }
+            xSemaphoreGive( xUARTToBBGSemaphore );
         }
+
     }
 }
 
@@ -475,7 +532,7 @@ void UARTIntHandler(void)
         /* Read the next character from the UART and write it back to the UART. */
 //        UARTprintf(ROM_UARTCharGetNonBlocking(UART7_BASE));
         uint8_t ui8CharToSend;
-        sprintf(&ui8CharToSend, "%c", ROM_UARTCharGetNonBlocking(UART7_BASE));
+        sprintf(&ui8CharToSend, "%c", UARTCharGet(UART7_BASE));
         UARTSend(&ui8CharToSend);
     }
 }
