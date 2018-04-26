@@ -325,21 +325,22 @@ void read_from_logger_msg_queue(void)
         char msg_to_write[LOG_MSG_PAYLOAD_SIZE];
         memset(msg_to_write, '\0', sizeof(msg_to_write));
         
-        char step_count_msg[32];
-        memset(step_count_msg, '\0', sizeof(step_count_msg));
+        char msg_to_log[32];
+        memset(msg_to_log, '\0', sizeof(msg_to_log));
             
-        sprintf(step_count_msg, "Message: Step count: %d\n", (((struct _socket_msg_struct_ *)&recv_buffer)->data));
         
         if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_PEDOMETER)
         {
+            sprintf(msg_to_log, "Message: Step count: %d\n", (((struct _socket_msg_struct_ *)&recv_buffer)->data));
             sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
                     timestamp_str, "Pedometer Task");
 
         }
-        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_HEART_RATE)
+        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_HUMIDITY)
         {
+            sprintf(msg_to_log, "Message: Humidity value: %d\n", (((struct _socket_msg_struct_ *)&recv_buffer)->data));
             sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
-                    timestamp_str, "Heart Rate Task");
+                    timestamp_str, "Humididty Task");
 
         }
 
@@ -378,7 +379,7 @@ void read_from_logger_msg_queue(void)
         }
 
         strcat(msg_to_write, " | ");
-        strcat(msg_to_write, step_count_msg);
+        strcat(msg_to_write, msg_to_log);
 
         printf("Message to write: %s\n", msg_to_write);
         int num_written_bytes = write(logger_fd, msg_to_write, strlen(msg_to_write));

@@ -60,7 +60,7 @@
 
 /* Task Defines */
 #define TASK_PEDOMETER                      0x1
-#define TASK_HEART_RATE                     0x2
+#define TASK_HUMIDITY                       0x2
 
 /* Log type defines */
 #define LOG_TYPE_DATA                       0x1

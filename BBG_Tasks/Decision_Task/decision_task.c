@@ -214,11 +214,13 @@ void read_from_decision_task_msg_queue(void)
             return;
         }
 
+#if 0
         printf("Pedometer count: %d, msg_src: %d, log level: %d, log_type: %d\n",
             (((struct _socket_msg_struct_ *)&recv_buffer)->data),
             (((struct _socket_msg_struct_ *)&recv_buffer)->source_id),
             (((struct _socket_msg_struct_ *)&recv_buffer)->log_level),
             (((struct _socket_msg_struct_ *)&recv_buffer)->log_type));
+#endif
     }
 }
 

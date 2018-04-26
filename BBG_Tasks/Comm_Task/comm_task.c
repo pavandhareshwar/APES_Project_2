@@ -131,7 +131,14 @@ void *comm_thread_func(void *arg)
             printf("Log Level:%d\n", x_sock_data_rcvd.log_level);
             printf("Log Type:%d\n", x_sock_data_rcvd.log_type);
             printf("Source ID:%d\n", x_sock_data_rcvd.source_id);
-            printf("Step count is:%d\n",x_sock_data_rcvd.data);
+            if (x_sock_data_rcvd.source_id == TASK_PEDOMETER)
+            {
+                printf("Step count is:%d\n",x_sock_data_rcvd.data);
+            }
+            else
+            {
+                printf("Humidity data is:%d\n",x_sock_data_rcvd.data);
+            }
 #endif  
             if (gb_waiting_for_ext_app_uart_rsp == true)
             {
