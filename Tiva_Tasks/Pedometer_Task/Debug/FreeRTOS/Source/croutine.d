@@ -11,7 +11,6 @@ FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/CCS/ccsv8/tools/compiler/ti
 FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/CCS/ccsv8/tools/compiler/ti-cgt-arm_18.1.1.LTS/include/machine/_stdint.h
 FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/CCS/ccsv8/tools/compiler/ti-cgt-arm_18.1.1.LTS/include/sys/_stdint.h
 FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOSConfig.h
-FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/main.h
 FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/projdefs.h
 FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/portable.h
 FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/deprecated_definitions.h
@@ -33,7 +32,6 @@ FreeRTOS/Source/croutine.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_
 /Users/pavandhareshwar/CCS/ccsv8/tools/compiler/ti-cgt-arm_18.1.1.LTS/include/machine/_stdint.h: 
 /Users/pavandhareshwar/CCS/ccsv8/tools/compiler/ti-cgt-arm_18.1.1.LTS/include/sys/_stdint.h: 
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOSConfig.h: 
-/Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/main.h: 
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/projdefs.h: 
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/portable.h: 
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/deprecated_definitions.h: 

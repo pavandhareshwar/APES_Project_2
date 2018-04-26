@@ -29,7 +29,6 @@ pedometer_task.obj: /Users/pavandhareshwar/Downloads/TivaWare/SW-TM4C-2.1.4.178/
 pedometer_task.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/FreeRTOS.h
 pedometer_task.obj: /Users/pavandhareshwar/CCS/ccsv8/tools/compiler/ti-cgt-arm_18.1.1.LTS/include/stddef.h
 pedometer_task.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOSConfig.h
-pedometer_task.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/main.h
 pedometer_task.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/projdefs.h
 pedometer_task.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/portable.h
 pedometer_task.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/deprecated_definitions.h
@@ -70,7 +69,6 @@ pedometer_task.obj: /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/Free
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/FreeRTOS.h: 
 /Users/pavandhareshwar/CCS/ccsv8/tools/compiler/ti-cgt-arm_18.1.1.LTS/include/stddef.h: 
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOSConfig.h: 
-/Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/main.h: 
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/projdefs.h: 
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/portable.h: 
 /Users/pavandhareshwar/workspace_v8/tiva_freertos_proj2/FreeRTOS/Source/include/deprecated_definitions.h: 
