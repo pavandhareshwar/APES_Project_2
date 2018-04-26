@@ -77,6 +77,7 @@
 
 #define MAX_MSG_LEN
 #define QUEUE_LENGTH                        10
+#define HB_QUEUE_LENGTH                     20
 
 
 /* Task Defines */
@@ -101,15 +102,40 @@
 #define READ_USER_REG                       0xE7
 #define DEFAULT_VALUE                       0x01
 
+
+/* Task notification bitmasks */
+#define PEDOMETER_TASK_HB_BM                0x1
+#define HUMIDITY_TASK_HB_BM                 0x2
+#define UART_WR_TASK_HB_BM                  0x4
+#define UART_RD_TASK_HB_BM                  0x8
+
+#define TASK_UNALIVE_CNT_UPPER_LIMIT        5
+
+
 SemaphoreHandle_t xUARTSemaphore, xUARTToBBGSemaphore;
-SemaphoreHandle_t xQueueMutex;
+SemaphoreHandle_t xQueueMutex, xHBQueueMutex;
 SemaphoreHandle_t xPedometerDataAvail;
-QueueHandle_t xQueue;
+QueueHandle_t xQueue, xHBQueue;
+
+/* Timer Handles */
+TaskHandle_t hdlPedTask, hdlHumTask, hdlUARTWriterTask, hdlUARTReaderTask, hdlMainTask;
 
 /* System clock rate in Hz */
 uint32_t g_ui32SysClock;
 
 uint32_t gui32IsrCounter;
+
+uint32_t gui32CheckHbPedTask, gui32CheckHbHumTask, gui32CheckHbUARTWrTask, gui32CheckHbUARTRdTask;
+uint32_t gui32PedTaskHb, gui32HumTaskHb, gui32UARTWrTaskHb, gui32UARTRdTaskHb;
+
+uint32_t gui32PedTaskUnAliveCount, gui32HumTaskUnAliveCount;
+uint32_t gui32UARTWrTaskUnAliveCount, gui32UARTRdTaskUnAliveCount;
+
+SemaphoreHandle_t xHbPedTaskCheckSem, xHbPedTaskValSem;
+SemaphoreHandle_t xHbHumTaskCheckSem, xHbHumTaskValSem;
+SemaphoreHandle_t xHbUARTWrTaskCheckSem, xHbUARTWrTaskValSem;
+SemaphoreHandle_t xHbUARTRdTaskCheckSem, xHbUARTRdTaskValSem;
+
 
 /* Socket message structure */
 typedef struct
@@ -168,7 +194,7 @@ BaseType_t CreateTasks(void);
  *
  *  This function will send the data in @param pui8MsgStr to UART
  *
- *  @param      pui8MsgStr  : pointer to message
+ *  @param      pui8MsgStr      : pointer to message
  *
  *  @return     void
  */
@@ -316,5 +342,7 @@ void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen);
  *  @return     void
  */
 void xPedometerStepCountIntHandler(void);
+
+void vMainTask( void *pvParameters );
 
 #endif /* MAIN_H_ */

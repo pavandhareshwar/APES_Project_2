@@ -22,6 +22,8 @@ int main(void)
 
     QueueCreate();
 
+    gui32CheckHbPedTask = 0;
+
     if (CreateTasks() == pdPASS)
     {
         /* Start the scheduler */
@@ -92,43 +94,51 @@ int QueueCreate(void)
         UARTSend("Queue created successfully\r\n");
 
         xQueueMutex = xSemaphoreCreateMutex();
-        return 0;
     }
     else
     {
         UARTSend("Queue creation failed\r\n");
         return -1;
     }
+
+    return 0;
 }
 
 BaseType_t CreateTasks(void)
 {
     BaseType_t xRetVal = pdTRUE;
 
-    if(xTaskCreate(vPedometerTask, "Pedometer_Task", TASK_BUFFER_SIZE, NULL, 1, NULL) == pdFALSE)
+    if(xTaskCreate(vPedometerTask, "Pedometer_Task", TASK_BUFFER_SIZE, NULL, 1, &hdlPedTask) == pdFALSE)
     {
         UARTSend("Pedometer Task creation failed\r\n");
         xRetVal = pdFAIL;
         return xRetVal;
     }
 
-    if(xTaskCreate(vHumidityTask, "Humidity_Task", TASK_BUFFER_SIZE, NULL, 1, NULL) == pdFALSE)
+    if(xTaskCreate(vHumidityTask, "Humidity_Task", TASK_BUFFER_SIZE, NULL, 1, &hdlHumTask) == pdFALSE)
     {
         UARTSend("Pedometer Task creation failed\r\n");
         xRetVal = pdFAIL;
         return xRetVal;
     }
 
-    if(xTaskCreate(vUARTWriterTask, "UARTWriterTask", TASK_BUFFER_SIZE, NULL, 1, NULL) == pdFALSE)
+    if(xTaskCreate(vUARTWriterTask, "UARTWriterTask", TASK_BUFFER_SIZE, NULL, 1, &hdlUARTWriterTask) == pdFALSE)
     {
         UARTSend("UART Writer Task creation failed\r\n");
         xRetVal = pdFAIL;
         return xRetVal;
     }
 
-    if(xTaskCreate(vUARTReaderTask, "UARTWriterTask", TASK_BUFFER_SIZE, NULL, 1, NULL) == pdFALSE)
+    if(xTaskCreate(vUARTReaderTask, "UARTWriterTask", TASK_BUFFER_SIZE, NULL, 1, &hdlUARTReaderTask) == pdFALSE)
     {
         UARTSend("UART Writer Task creation failed\r\n");
+        xRetVal = pdFAIL;
+        return xRetVal;
+    }
+
+    if(xTaskCreate(vMainTask, "MainTask", TASK_BUFFER_SIZE, NULL, 1, &hdlMainTask) == pdFALSE)
+    {
+        UARTSend("Main Task creation failed\r\n");
         xRetVal = pdFAIL;
         return xRetVal;
     }
@@ -144,7 +154,7 @@ void UARTSend(uint8_t *pui8MsgStr)
     {
         ui32_str_len = strlen(pui8MsgStr);
 
-//        if( xSemaphoreTake( xUARTSemaphore, ( TickType_t ) 10 ) == pdTRUE )
+        if( xSemaphoreTake( xUARTSemaphore, ( TickType_t ) 10 ) == pdTRUE )
         {
             while (ui32_str_len != 0)
             {
@@ -154,8 +164,122 @@ void UARTSend(uint8_t *pui8MsgStr)
                 pui8MsgStr++;
             }
 
-//            xSemaphoreGive( xUARTSemaphore );
+            xSemaphoreGive( xUARTSemaphore );
         }
+    }
+}
+
+void vMainTask( void *pvParameters )
+{
+    xHbPedTaskCheckSem = xSemaphoreCreateMutex();
+    xHbPedTaskValSem = xSemaphoreCreateMutex();
+
+    xHbHumTaskCheckSem = xSemaphoreCreateMutex();
+    xHbHumTaskValSem = xSemaphoreCreateMutex();
+
+    xHbUARTWrTaskCheckSem = xSemaphoreCreateMutex();
+    xHbUARTWrTaskValSem = xSemaphoreCreateMutex();
+
+    xHbUARTRdTaskCheckSem = xSemaphoreCreateMutex();
+    xHbUARTRdTaskValSem = xSemaphoreCreateMutex();
+
+    while (1)
+    {
+        /* Send heartbeat request to each sub-tasks and get a response */
+
+        /* Check heartbeat from pedometer task */
+        if (xSemaphoreTake(xHbPedTaskCheckSem, portMAX_DELAY) == pdTRUE) {
+            gui32CheckHbPedTask = 1;
+            xSemaphoreGive(xHbPedTaskCheckSem);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        if (xSemaphoreTake(xHbPedTaskValSem, pdMS_TO_TICKS(500)) == pdTRUE) {
+            if (gui32PedTaskHb == 1)
+            {
+                UARTSend("Pedometer task alive\r\n");
+            }
+            else
+            {
+                gui32PedTaskUnAliveCount++;
+                if (gui32PedTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                    UARTSend("Report pedometer task's unalive state to BBG\r\n");
+                }
+            }
+            xSemaphoreGive(xHbPedTaskValSem);
+        }
+
+        /* Check heartbeat from humidity task */
+        if (xSemaphoreTake(xHbHumTaskCheckSem, portMAX_DELAY) == pdTRUE) {
+            gui32CheckHbHumTask = 1;
+            xSemaphoreGive(xHbHumTaskCheckSem);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        if (xSemaphoreTake(xHbHumTaskValSem, pdMS_TO_TICKS(500)) == pdTRUE) {
+            if (gui32HumTaskHb == 1)
+            {
+                UARTSend("Humidity task alive\r\n");
+            }
+            else
+            {
+                gui32HumTaskUnAliveCount++;
+                if (gui32HumTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                    UARTSend("Report humidity task's unalive state to BBG\r\n");
+                }
+            }
+            xSemaphoreGive(xHbHumTaskValSem);
+        }
+
+        /* Check heartbeat from UART writer task */
+        if (xSemaphoreTake(xHbUARTWrTaskCheckSem, portMAX_DELAY) == pdTRUE) {
+            gui32CheckHbUARTWrTask = 1;
+            xSemaphoreGive(xHbUARTWrTaskCheckSem);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        if (xSemaphoreTake(xHbUARTWrTaskValSem, pdMS_TO_TICKS(500)) == pdTRUE) {
+            if (gui32UARTWrTaskHb == 1)
+            {
+                UARTSend("UART writer task alive\r\n");
+            }
+            else
+            {
+                gui32UARTWrTaskUnAliveCount++;
+                if (gui32UARTWrTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                    UARTSend("Report UART writer task's unalive state to BBG\r\n");
+                }
+            }
+            xSemaphoreGive(xHbUARTWrTaskValSem);
+        }
+
+        /* Check heartbeat from UART writer task */
+        if (xSemaphoreTake(xHbUARTRdTaskCheckSem, portMAX_DELAY) == pdTRUE) {
+            gui32CheckHbUARTRdTask = 1;
+            xSemaphoreGive(xHbUARTRdTaskCheckSem);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000));
+
+        if (xSemaphoreTake(xHbUARTRdTaskValSem, pdMS_TO_TICKS(1000)) == pdTRUE) {
+            if (gui32UARTRdTaskHb == 1)
+            {
+                UARTSend("UART reader task alive\r\n");
+            }
+            else
+            {
+                gui32UARTRdTaskUnAliveCount++;
+                if (gui32UARTRdTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                    UARTSend("Report UART reader task's unalive state to BBG\r\n");
+                }
+            }
+            xSemaphoreGive(xHbUARTRdTaskValSem);
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
 
@@ -334,27 +458,44 @@ void vPedometerTask( void *pvParameters )
 
     for (;;)
     {
-        memset(&xSockMsg, '\0', sizeof(xSockMsg));
-        if (xSemaphoreTake(xPedometerDataAvail, portMAX_DELAY))
+        if (gui32CheckHbPedTask == 1)
         {
-            memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
-//            sprintf(ui8_msg_str, "step counter is %d\r\n", gui32IsrCounter);
-            UARTSend(ui8_msg_str);
-
-            xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
-            xSockMsg.ui32LogType = LOG_TYPE_DATA;
-            xSockMsg.ui32SourceId = TASK_PEDOMETER;
-            xSockMsg.ui32Data = gui32IsrCounter;
-
-            /* Push the data to be sent via UART to the queue */
-            if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
-            {
-                if (xQueueSendToBack(xQueue, &xSockMsg, portMAX_DELAY) != pdPASS)
-                {
-                    UARTSend("Queue Send failed\r\n");
-                }
-                xSemaphoreGive(xQueueMutex);
+            if (xSemaphoreTake(xHbPedTaskCheckSem, portMAX_DELAY) == pdTRUE) {
+                gui32CheckHbPedTask = 0;
+                xSemaphoreGive(xHbPedTaskCheckSem);
             }
+
+            if (xSemaphoreTake(xHbPedTaskValSem, portMAX_DELAY) == pdTRUE) {
+                gui32PedTaskHb = 1;
+                xSemaphoreGive(xHbPedTaskValSem);
+            }
+        }
+        else
+        {
+#if 1
+            memset(&xSockMsg, '\0', sizeof(xSockMsg));
+            if (xSemaphoreTake(xPedometerDataAvail, portMAX_DELAY))
+            {
+                memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
+//                sprintf(ui8_msg_str, "Step counter is %d\r\n", gui32IsrCounter);
+//                UARTSend(ui8_msg_str);
+
+                xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
+                xSockMsg.ui32LogType = LOG_TYPE_DATA;
+                xSockMsg.ui32SourceId = TASK_PEDOMETER;
+                xSockMsg.ui32Data = gui32IsrCounter;
+
+                /* Push the data to be sent via UART to the queue */
+                if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
+                {
+                    if (xQueueSendToBack(xQueue, &xSockMsg, portMAX_DELAY) != pdPASS)
+                    {
+                        UARTSend("Queue Send failed\r\n");
+                    }
+                    xSemaphoreGive(xQueueMutex);
+                }
+            }
+#endif
         }
     }
 
@@ -420,26 +561,43 @@ void vHumidityTask(void *pvParameters)
 
     while(1)
     {
-        memset(buffer,'0',sizeof(buffer));
-        float value = xReadHumidityValue();
-//        sprintf(buffer,"Humidity Value:%3.2f\r\n",value);
-//        UARTSend(buffer);
-
-        memset(&xSockMsg, 0, sizeof(sock_msg));
-
-        xSockMsg.ui32LogLevel = LOG_LEVEL_INFO;
-        xSockMsg.ui32LogType = LOG_TYPE_DATA;
-        xSockMsg.ui32SourceId = TASK_HUMIDITY;
-        xSockMsg.ui32Data = (uint32_t)value;
-
-        /* Push the data to be sent via UART to the queue */
-        if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
+        if (gui32CheckHbHumTask == 1)
         {
-            if (xQueueSendToBack(xQueue, &xSockMsg, portMAX_DELAY) != pdPASS)
-            {
-                UARTSend("Queue Send failed\r\n");
+            if (xSemaphoreTake(xHbHumTaskCheckSem, portMAX_DELAY) == pdTRUE) {
+                gui32CheckHbHumTask = 0;
+                xSemaphoreGive(xHbHumTaskCheckSem);
             }
-            xSemaphoreGive(xQueueMutex);
+
+            if (xSemaphoreTake(xHbHumTaskValSem, portMAX_DELAY) == pdTRUE) {
+//                gui32HumTaskHb = 1;
+                xSemaphoreGive(xHbHumTaskValSem);
+            }
+        }
+        else
+        {
+#if 1
+            memset(buffer,'0',sizeof(buffer));
+            float value = xReadHumidityValue();
+//            sprintf(buffer,"Humidity Value:%3.2f\r\n",value);
+//            UARTSend(buffer);
+
+            memset(&xSockMsg, 0, sizeof(sock_msg));
+
+            xSockMsg.ui32LogLevel = LOG_LEVEL_INFO;
+            xSockMsg.ui32LogType = LOG_TYPE_DATA;
+            xSockMsg.ui32SourceId = TASK_HUMIDITY;
+            xSockMsg.ui32Data = (uint32_t)value;
+
+            /* Push the data to be sent via UART to the queue */
+            if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
+            {
+                if (xQueueSendToBack(xQueue, &xSockMsg, portMAX_DELAY) != pdPASS)
+                {
+                    UARTSend("Queue Send failed\r\n");
+                }
+                xSemaphoreGive(xQueueMutex);
+            }
+#endif
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -486,17 +644,33 @@ void vUARTWriterTask(void *pvParameters)
 
     for(;;)
     {
-        memset((void*)&xSockMsg,0,sizeof(xSockMsg));
+        if (gui32CheckHbUARTWrTask == 1)
+        {
+            if (xSemaphoreTake(xHbUARTWrTaskCheckSem, portMAX_DELAY) == pdTRUE) {
+                gui32CheckHbUARTWrTask = 0;
+                xSemaphoreGive(xHbUARTWrTaskCheckSem);
+            }
 
-        while(uxQueueSpacesAvailable(xQueue) != QUEUE_LENGTH){
-            if(xSemaphoreTake(xQueueMutex,portMAX_DELAY)){
-                if( xQueueReceive( xQueue, &xSockMsg, portMAX_DELAY ) != pdPASS ){
-                    UARTSend("\ERROR:Queue Receive\r\n");
+            if (xSemaphoreTake(xHbUARTWrTaskValSem, portMAX_DELAY) == pdTRUE) {
+                gui32UARTWrTaskHb = 1;
+                xSemaphoreGive(xHbUARTWrTaskValSem);
+            }
+        }
+        else
+        {
+            memset((void*)&xSockMsg,0,sizeof(xSockMsg));
+
+            while(uxQueueSpacesAvailable(xQueue) != QUEUE_LENGTH)
+            {
+                if(xSemaphoreTake(xQueueMutex,portMAX_DELAY)){
+                    if( xQueueReceive( xQueue, &xSockMsg, portMAX_DELAY ) != pdPASS ){
+                        UARTSend("\ERROR:Queue Receive\r\n");
+                    }
+                    else{
+                        UARTSendToBBG((uint8_t *)&xSockMsg, sizeof(xSockMsg));
+                    }
+                    xSemaphoreGive(xQueueMutex);
                 }
-                else{
-                    UARTSendToBBG((uint8_t *)&xSockMsg, sizeof(xSockMsg));
-                }
-                xSemaphoreGive(xQueueMutex);
             }
         }
     }
@@ -512,46 +686,62 @@ void vUARTReaderTask(void *pvParameters)
 
     for (;;)
     {
-        while(UARTCharsAvail(UART7_BASE))
+        if (gui32CheckHbUARTRdTask == 1)
         {
-            memset(buffer, '\0', sizeof(buffer));
-            size = 28;
-            i = 0;
-
-            while(size--)
-            {
-                /* Read the next character from the UART and write it back to the UART. */
-                sprintf(&ui8CharToSend, "%c", (char)UARTCharGet(UART7_BASE));
-                buffer[i++] = ui8CharToSend;
+            if (xSemaphoreTake(xHbUARTRdTaskCheckSem, portMAX_DELAY) == pdTRUE) {
+                gui32CheckHbUARTRdTask = 0;
+                xSemaphoreGive(xHbUARTRdTaskCheckSem);
             }
 
-            uint8_t printMsg[32];
-            memset(printMsg, '\0', sizeof(printMsg));
-            sprintf(printMsg, "Req Recipient: %d\r\n", ((bbg_req_msg *)buffer)->req_recipient);
-            UARTSend(printMsg);
-
-            memset(printMsg, '\0', sizeof(printMsg));
-            sprintf(printMsg, "Params: %d\r\n", ((bbg_req_msg *)buffer)->params);
-            UARTSend(printMsg);
-
-            memset(printMsg, '\0', sizeof(printMsg));
-            sprintf(printMsg, "Req Msg: %s\r\n", ((bbg_req_msg *)buffer)->rq_msg);
-            UARTSend(printMsg);
-
-            memset((void*)&xSockMsg, 0, sizeof(xSockMsg));
-
-            xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
-            xSockMsg.ui32LogType = LOG_TYPE_DATA;
-            xSockMsg.ui32SourceId = TASK_PEDOMETER;
-            if (((bbg_req_msg *)buffer)->req_recipient == TASK_PEDOMETER)
-            {
-                xSockMsg.ui32Data = gui32IsrCounter;
+            if (xSemaphoreTake(xHbUARTRdTaskValSem, portMAX_DELAY) == pdTRUE) {
+                gui32UARTRdTaskHb = 1;
+                xSemaphoreGive(xHbUARTRdTaskValSem);
             }
-
-            vTaskDelay(pdMS_TO_TICKS(500));
-
-            UARTSendToBBG((uint8_t *)&xSockMsg, sizeof(xSockMsg));
         }
+        else
+        {
+            if(UARTCharsAvail(UART7_BASE))
+            {
+                memset(buffer, '\0', sizeof(buffer));
+                size = 28;
+                i = 0;
+
+                while(size--)
+                {
+                    /* Read the next character from the UART and write it back to the UART. */
+                    sprintf(&ui8CharToSend, "%c", (char)UARTCharGet(UART7_BASE));
+                    buffer[i++] = ui8CharToSend;
+                }
+
+                uint8_t printMsg[32];
+                memset(printMsg, '\0', sizeof(printMsg));
+                sprintf(printMsg, "Req Recipient: %d\r\n", ((bbg_req_msg *)buffer)->req_recipient);
+                UARTSend(printMsg);
+
+                memset(printMsg, '\0', sizeof(printMsg));
+                sprintf(printMsg, "Params: %d\r\n", ((bbg_req_msg *)buffer)->params);
+                UARTSend(printMsg);
+
+                memset(printMsg, '\0', sizeof(printMsg));
+                sprintf(printMsg, "Req Msg: %s\r\n", ((bbg_req_msg *)buffer)->rq_msg);
+                UARTSend(printMsg);
+
+                memset((void*)&xSockMsg, 0, sizeof(xSockMsg));
+
+                xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
+                xSockMsg.ui32LogType = LOG_TYPE_DATA;
+                xSockMsg.ui32SourceId = TASK_PEDOMETER;
+                if (((bbg_req_msg *)buffer)->req_recipient == TASK_PEDOMETER)
+                {
+                    xSockMsg.ui32Data = gui32IsrCounter;
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(500));
+
+                UARTSendToBBG((uint8_t *)&xSockMsg, sizeof(xSockMsg));
+            }
+        }
+
     }
 
 }
