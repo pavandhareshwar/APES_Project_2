@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
+#include <semaphore.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -84,6 +85,13 @@ char *uart4_port = "/dev/ttyO4";
 int uart4_fd;
 
 bool gb_waiting_for_ext_app_uart_rsp;
+
+/* This semaphore will be used to signal the external app socket interface 
+ * thread from communication thread that a response has been received for 
+ * the request that was received from the external application */
+sem_t sem_ext_app_req_rsp;
+sem_t sem_sock_msg_shared;
+
 #endif
 
 /*---------------------------------- GLOBALS --------------------------------*/
@@ -111,6 +119,8 @@ struct _logger_msg_struct_
     char logger_msg_src_id[LOGGER_ATTR_LEN];
     char logger_msg_level[LOGGER_ATTR_LEN];
 };
+
+sock_msg x_sock_data_rcvd_shared;
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
 
