@@ -18,11 +18,22 @@ int main(void)
     /* Initializing the UART */
     UART0_Init();
 
+    /* Initializing LED's */
+    LED_Init();
+
     I2C0_Init();
 
     QueueCreate();
 
     gui32CheckHbPedTask = 0;
+
+    int startupTestRetVal = PerformSysStartUpTest();
+    if (startupTestRetVal == -1)
+    {
+        UARTSend("Startup Test Failed. Exiting system\r\n");
+        GPIOPinWrite(GPIO_PORTN_BASE,GPIO_PIN_0,1);
+        exit(1);
+    }
 
     if (CreateTasks() == pdPASS)
     {
@@ -40,21 +51,42 @@ int main(void)
 	return i32RetVal;
 }
 
+/**
+​* ​ ​ @brief​ : Initialize the LED pins
+​* ​ ​
+​*
+​* ​ ​ @param​ ​ None
+​*
+​* ​ ​ @return​ ​None
+​*/
+void LED_Init()
+{
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
+
+    /* PN0 and PN1 are used for USER LEDs. */
+    MAP_GPIOPinTypeGPIOOutput(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    MAP_GPIOPadConfigSet(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1,
+                             GPIO_STRENGTH_12MA, GPIO_PIN_TYPE_STD);
+
+    /* Default the LEDs to OFF. */
+    MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1, 0);
+}
+
 void UART0_Init(void)
 {
     /* Enable the GPIO Peripheral used by the UART. */
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 
     /* Enable UART0 */
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
 
     /* Configure GPIO Pins for UART mode. */
-    ROM_GPIOPinConfigure(GPIO_PA0_U0RX);
-    ROM_GPIOPinConfigure(GPIO_PA1_U0TX);
-    ROM_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    MAP_GPIOPinConfigure(GPIO_PA0_U0RX);
+    MAP_GPIOPinConfigure(GPIO_PA1_U0TX);
+    MAP_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
 
     /* Configure the UART : baud rate: 115200, 1 stop bit and no parity */
-    ROM_UARTConfigSetExpClk(UART0_BASE, g_ui32SysClock, 115200,
+    MAP_UARTConfigSetExpClk(UART0_BASE, g_ui32SysClock, 115200,
                             (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
                                         UART_CONFIG_PAR_NONE));
 
@@ -67,23 +99,42 @@ void UART0_Init(void)
 void I2C0_Init(void)
 {
     /* Enable the GPIO Peripheral used by the I2C0 */
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
 
     /* Configure GPIO pins for I2C0 */
-    ROM_GPIOPinConfigure(GPIO_PB2_I2C0SCL);
-    ROM_GPIOPinConfigure(GPIO_PB3_I2C0SDA);
+    MAP_GPIOPinConfigure(GPIO_PB2_I2C0SCL);
+    MAP_GPIOPinConfigure(GPIO_PB3_I2C0SDA);
 
     /* Configure GPIO pin PB2 as SDA and PB3 as SCL */
     GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
-    ROM_GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
+    MAP_GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
 
     /* Disable-reset-enable the I2C0 peripheral */
-    ROM_SysCtlPeripheralDisable(SYSCTL_PERIPH_I2C0);
-    ROM_SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
+    MAP_SysCtlPeripheralDisable(SYSCTL_PERIPH_I2C0);
+    MAP_SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
 
     /* Configure master module */
-    ROM_I2CMasterInitExpClk(I2C_BASE, SYSTEM_CLOCK, true);
+    MAP_I2CMasterInitExpClk(I2C_BASE, SYSTEM_CLOCK, true);
+}
+
+int PerformSysStartUpTest(void)
+{
+    int pedometerSensorTestVal = vTestPedometerSensor(WHO_AM_I_REG);
+    if (pedometerSensorTestVal == -1)
+    {
+        UARTSend("Pedometer Startup test failed\r\n");
+        return -1;
+    }
+
+    int humiditySensorTestVal = vTestHumiditySensor();
+    if (humiditySensorTestVal == -1)
+    {
+        UARTSend("Humidity Startup test failed\r\n");
+        return -1;
+    }
+
+    return 0;
 }
 
 int QueueCreate(void)
@@ -256,7 +307,7 @@ void vMainTask( void *pvParameters )
             xSemaphoreGive(xHbUARTWrTaskValSem);
         }
 
-        /* Check heartbeat from UART writer task */
+        /* Check heartbeat from UART reader task */
         if (xSemaphoreTake(xHbUARTRdTaskCheckSem, portMAX_DELAY) == pdTRUE) {
             gui32CheckHbUARTRdTask = 1;
             xSemaphoreGive(xHbUARTRdTaskCheckSem);
@@ -281,6 +332,18 @@ void vMainTask( void *pvParameters )
 
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
+}
+
+
+void vGetTime(char * input_string)
+{
+    time_t current_time;
+    struct tm *info;
+    char buffer[16];
+    time(&current_time);
+
+    info = localtime(&current_time);
+    strftime(input_string, 9,"%H:%M:%S",info);
 }
 
 void vPedometerTaskInit(void)
@@ -349,12 +412,12 @@ void vPedometerTaskInit(void)
     xSemaphoreTake(xPedometerDataAvail, 0);
 
     /* Configure GPIO M (PM4) peripheral for INT1 interrupt that will be generated when a step is detected */
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
 
     /* Wait until the peripheral is ready */
-    while(!ROM_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM));
+    while(!MAP_SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM));
 
-    ROM_GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_4);
+    MAP_GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_4);
 
     GPIOPadConfigSet(GPIO_PORTM_BASE, GPIO_PIN_4,
                      GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);  // Enable weak pullup resistor for PF4
@@ -366,8 +429,8 @@ void vPedometerTaskInit(void)
     GPIOIntRegister(GPIO_PORTM_BASE, xPedometerStepCountIntHandler);
 
     /* Enable interrupt detection on rising edge */
-    ROM_GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_RISING_EDGE);
-    ROM_GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_4);     // Enable interrupt for PM4
+    MAP_GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_RISING_EDGE);
+    MAP_GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_4);     // Enable interrupt for PM4
 }
 
 void vPedometerTask( void *pvParameters )
@@ -477,13 +540,14 @@ void vPedometerTask( void *pvParameters )
             if (xSemaphoreTake(xPedometerDataAvail, portMAX_DELAY))
             {
                 memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
-//                sprintf(ui8_msg_str, "Step counter is %d\r\n", gui32IsrCounter);
-//                UARTSend(ui8_msg_str);
+                sprintf(ui8_msg_str, "Step counter is %d\r\n", gui32IsrCounter);
+                UARTSend(ui8_msg_str);
 
                 xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
                 xSockMsg.ui32LogType = LOG_TYPE_DATA;
                 xSockMsg.ui32SourceId = TASK_PEDOMETER;
                 xSockMsg.ui32Data = gui32IsrCounter;
+                vGetTime(xSockMsg.ucTimeStamp);
 
                 /* Push the data to be sent via UART to the queue */
                 if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
@@ -503,35 +567,76 @@ void vPedometerTask( void *pvParameters )
 
 }
 
+int vTestPedometerSensor(uint32_t ui32RegToRead)
+{
+    int retVal = -1;
+
+    uint32_t default_value = vReadPedometerSensorregister(ui32RegToRead);
+    if(default_value == 105)
+    {
+        UARTSend("Valid Pedometer Sensor\r\n");
+        retVal = 0;
+    }
+
+    return retVal;
+}
+int vTestHumiditySensor()
+{
+    int retVal = -1;
+
+    uint8_t default_value = read_humid_user_reg();
+    if(default_value == 2)
+    {
+        UARTSend("Valid Humidity Sensor\r\n");
+        retVal = 0;
+    }
+
+    return retVal;
+
+}
+
 void vWritePedometerSensorRegister(uint32_t ui32RegToWrite, uint32_t ui32RegVal)
 {
-    ROM_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, false);
-    ROM_I2CMasterDataPut(I2C_BASE, ui32RegToWrite);
-    ROM_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-    while(ROM_I2CMasterBusy(I2C_BASE));
+    MAP_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, false);
+    MAP_I2CMasterDataPut(I2C_BASE, ui32RegToWrite);
+    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_START);
+    while(MAP_I2CMasterBusy(I2C_BASE));
 
     SysCtlDelay(500); //Delay by 1us
 
-    ROM_I2CMasterDataPut(I2C_BASE, ui32RegVal);
-    ROM_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
-    while(ROM_I2CMasterBusy(I2C_BASE));
+    MAP_I2CMasterDataPut(I2C_BASE, ui32RegVal);
+    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
+    while(MAP_I2CMasterBusy(I2C_BASE));
 }
 
 uint32_t vReadPedometerSensorregister(uint32_t ui32RegToRead)
 {
     uint32_t ui32RegVal = 0;
+    int i=0;
 
-    ROM_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, false);
-    ROM_I2CMasterDataPut(I2C_BASE, ui32RegToRead);
-    ROM_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-    while(ROM_I2CMasterBusy(I2C_BASE));
+    MAP_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, false);
+    MAP_I2CMasterDataPut(I2C_BASE, ui32RegToRead);
+    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_START);
+    for(i=0; i<100; i++){
+        SysCtlDelay(1000);
+        if(!MAP_I2CMasterBusy(I2C_BASE)){
+            break;
+        }
+    }
+    //while(MAP_I2CMasterBusy(I2C_BASE));
+    i=0;
+    SysCtlDelay(15000); //Delay by 1us
 
-    SysCtlDelay(100); //Delay by 1us
-
-    ROM_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, true);
-    ROM_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
-    while(ROM_I2CMasterBusy(I2C_BASE));
-    ui32RegVal = ROM_I2CMasterDataGet(I2C_BASE);
+    MAP_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, true);
+    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
+    for(i=0; i<100; i++){
+            SysCtlDelay(1000);
+            if(!MAP_I2CMasterBusy(I2C_BASE)){
+                break;
+            }
+        }
+        //while(MAP_I2CMasterBusy(I2C_BASE));
+    ui32RegVal = MAP_I2CMasterDataGet(I2C_BASE);
 
     return ui32RegVal;
 }
@@ -539,17 +644,17 @@ uint32_t vReadPedometerSensorregister(uint32_t ui32RegToRead)
 void xPedometerStepCountIntHandler(void)
 {
     taskDISABLE_INTERRUPTS();
-    ROM_GPIOIntDisable(GPIO_PORTM_BASE, GPIO_PIN_4);
+    MAP_GPIOIntDisable(GPIO_PORTM_BASE, GPIO_PIN_4);
     IntMasterDisable();
-    ROM_GPIOIntClear(GPIO_PORTM_BASE, GPIO_PIN_4);  // Clear interrupt flag
+    MAP_GPIOIntClear(GPIO_PORTM_BASE, GPIO_PIN_4);  // Clear interrupt flag
 
     gui32IsrCounter++;
 
     xSemaphoreGive(xPedometerDataAvail);
 
-    ROM_GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_RISING_EDGE);
+    MAP_GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_4, GPIO_RISING_EDGE);
     IntMasterEnable();
-    ROM_GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_4);
+    MAP_GPIOIntEnable(GPIO_PORTM_BASE, GPIO_PIN_4);
 
     taskENABLE_INTERRUPTS();
 }
@@ -569,7 +674,7 @@ void vHumidityTask(void *pvParameters)
             }
 
             if (xSemaphoreTake(xHbHumTaskValSem, portMAX_DELAY) == pdTRUE) {
-//                gui32HumTaskHb = 1;
+                gui32HumTaskHb = 1;
                 xSemaphoreGive(xHbHumTaskValSem);
             }
         }
@@ -587,6 +692,7 @@ void vHumidityTask(void *pvParameters)
             xSockMsg.ui32LogType = LOG_TYPE_DATA;
             xSockMsg.ui32SourceId = TASK_HUMIDITY;
             xSockMsg.ui32Data = (uint32_t)value;
+            vGetTime(xSockMsg.ucTimeStamp);
 
             /* Push the data to be sent via UART to the queue */
             if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
@@ -667,7 +773,7 @@ void vUARTWriterTask(void *pvParameters)
                         UARTSend("\ERROR:Queue Receive\r\n");
                     }
                     else{
-                        UARTSendToBBG((uint8_t *)&xSockMsg, sizeof(xSockMsg));
+                        UARTSendToBBG((uint8_t *)&xSockMsg, 25);
                     }
                     xSemaphoreGive(xQueueMutex);
                 }
@@ -738,7 +844,7 @@ void vUARTReaderTask(void *pvParameters)
 
                 vTaskDelay(pdMS_TO_TICKS(500));
 
-                UARTSendToBBG((uint8_t *)&xSockMsg, sizeof(xSockMsg));
+                UARTSendToBBG((uint8_t *)&xSockMsg, 25);
             }
         }
 
@@ -749,21 +855,21 @@ void vUARTReaderTask(void *pvParameters)
 void UART7Init(void)
 {
     // Enable the peripherals.
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART7);
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART7);
+    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
 
     // Set GPIO PB0 and PB1 as UART pins.
     GPIOPinConfigure(GPIO_PC5_U7TX);
     GPIOPinConfigure(GPIO_PC4_U7RX);
-    ROM_GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
+    MAP_GPIOPinTypeUART(GPIO_PORTC_BASE, GPIO_PIN_4 | GPIO_PIN_5);
 
     // Configure the UART for 115200 baud, 8-N-1 operation.
-    ROM_UARTConfigSetExpClk(UART7_BASE, 120000000, 115200,
+    MAP_UARTConfigSetExpClk(UART7_BASE, 120000000, 115200,
                             (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
                                     UART_CONFIG_PAR_NONE));
 
-//    ROM_IntEnable(INT_UART7);
-//    ROM_UARTIntEnable(UART7_BASE, UART_INT_RX | UART_INT_RT);
+//    MAP_IntEnable(INT_UART7);
+//    MAP_UARTIntEnable(UART7_BASE, UART_INT_RX | UART_INT_RT);
 
 //    UARTLoopbackEnable(UART7_BASE);
 
@@ -792,18 +898,37 @@ void UARTIntHandler(void)
     uint32_t ui32Status;
 
     /* Get the interrupt status. */
-    ui32Status = ROM_UARTIntStatus(UART7_BASE, true);
+    ui32Status = MAP_UARTIntStatus(UART7_BASE, true);
 
     /* Clear the asserted interrupts. */
-    ROM_UARTIntClear(UART7_BASE, ui32Status);
+    MAP_UARTIntClear(UART7_BASE, ui32Status);
 
     /* Loop while there are characters in the receive FIFO. */
-    while(ROM_UARTCharsAvail(UART7_BASE))
+    while(MAP_UARTCharsAvail(UART7_BASE))
     {
         /* Read the next character from the UART and write it back to the UART. */
-//        UARTprintf(ROM_UARTCharGetNonBlocking(UART7_BASE));
+//        UARTprintf(MAP_UARTCharGetNonBlocking(UART7_BASE));
         uint8_t ui8CharToSend;
         sprintf(&ui8CharToSend, "%c", UARTCharGet(UART7_BASE));
         UARTSend(&ui8CharToSend);
     }
+}
+
+uint8_t read_humid_user_reg()
+{
+    uint8_t reg_value;
+    /* Reading user register */
+    MAP_I2CMasterSlaveAddrSet(I2C_BASE, HUMIDITY_SENSOR_ADDR, false);
+    MAP_I2CMasterDataPut(I2C_BASE, READ_USER_REG);
+    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_SEND);
+    while(MAP_I2CMasterBusy(I2C_BASE));
+
+    SysCtlDelay(1000);
+
+    MAP_I2CMasterSlaveAddrSet(I2C_BASE, HUMIDITY_SENSOR_ADDR, true);
+    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
+    while(MAP_I2CMasterBusy(I2C_BASE));
+    SysCtlDelay(1000);
+    reg_value = MAP_I2CMasterDataGet(I2C_BASE);
+    return reg_value;
 }
