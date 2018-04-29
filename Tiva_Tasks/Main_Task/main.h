@@ -120,6 +120,7 @@
 #define UART_RD_TASK_HB_BM                  0x8
 
 #define TASK_UNALIVE_CNT_UPPER_LIMIT        5
+#define MESSAGE_LENGTH                      12
 
 
 SemaphoreHandle_t xUARTSemaphore, xUARTToBBGSemaphore;
