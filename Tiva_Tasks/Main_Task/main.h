@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "inc/hw_memmap.h"
 #include "inc/hw_types.h"
@@ -144,6 +145,7 @@ typedef struct
     uint32_t ui32LogType;
     uint32_t ui32SourceId ;
     uint32_t ui32Data;
+    char ucTimeStamp[9];
 } sock_msg;
 
 typedef struct
@@ -344,5 +346,11 @@ void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen);
 void xPedometerStepCountIntHandler(void);
 
 void vMainTask( void *pvParameters );
+
+int vTestPedometerSensor(uint32_t ui32RegToRead);
+uint8_t read_humid_user_reg();
+int vTestHumiditySensor();
+
+void LED_Init();
 
 #endif /* MAIN_H_ */
