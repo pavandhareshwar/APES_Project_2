@@ -66,6 +66,8 @@
 #define TASK_PEDOMETER                      0x1
 #define TASK_HUMIDITY                       0x2
 
+#define TIVA_MSG_TIMESTAMP_ARR_LEN          9
+
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
@@ -104,6 +106,7 @@ typedef struct
     uint32_t log_type;
     uint32_t source_id;
 	uint32_t data;
+    char timestamp[TIVA_MSG_TIMESTAMP_ARR_LEN];
 } sock_msg;
 
 struct _ext_app_req_msg_struct_

@@ -74,6 +74,8 @@
 #define LOG_LEVEL_SHUTDOWN                  0x3
 #define LOG_LEVEL_CRITICAL                  0x4
 
+#define TIMESTAMP_ARR_LEN                   9
+
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/
@@ -94,6 +96,7 @@ struct _socket_msg_struct_
     uint32_t log_type;
     uint32_t source_id;
 	uint32_t data;
+    char timestamp[TIMESTAMP_ARR_LEN];
 };
 
 /*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/

@@ -305,7 +305,7 @@ void read_from_logger_msg_queue(void)
     int msg_priority;
     
     int num_recv_bytes;
-    while ((num_recv_bytes = mq_receive(logger_mq_handle, (char *)&recv_buffer,
+    while ((num_recv_bytes = mq_receive(logger_mq_handle, (char *)recv_buffer,
                                     MSG_QUEUE_MAX_MSG_SIZE, &msg_priority)) != -1)
     {
         if (num_recv_bytes < 0)
@@ -314,66 +314,67 @@ void read_from_logger_msg_queue(void)
             return;
         }
 
-        time_t tval = time(NULL);
-        struct tm *cur_time = localtime(&tval);
+        //time_t tval = time(NULL);
+        //struct tm *cur_time = localtime(&tval);
         
         char timestamp_str[32];
         memset(timestamp_str, '\0', sizeof(timestamp_str));
 
-        sprintf(timestamp_str, "%02d:%02d:%02d", cur_time->tm_hour, cur_time->tm_min, cur_time->tm_sec);
+        //sprintf(timestamp_str, "%02d:%02d:%02d", cur_time->tm_hour, cur_time->tm_min, cur_time->tm_sec);
         
         char msg_to_write[LOG_MSG_PAYLOAD_SIZE];
         memset(msg_to_write, '\0', sizeof(msg_to_write));
         
         char msg_to_log[32];
         memset(msg_to_log, '\0', sizeof(msg_to_log));
-            
         
-        if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_PEDOMETER)
+        strcpy(timestamp_str, (((struct _socket_msg_struct_ *)recv_buffer)->timestamp));
+        
+        if ((((struct _socket_msg_struct_ *)recv_buffer)->source_id) == TASK_PEDOMETER)
         {
-            sprintf(msg_to_log, "Message: Step count: %d\n", (((struct _socket_msg_struct_ *)&recv_buffer)->data));
+            sprintf(msg_to_log, "Message: Step count: %d\n", (((struct _socket_msg_struct_ *)recv_buffer)->data));
             sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
                     timestamp_str, "Pedometer Task");
 
         }
-        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->source_id) == TASK_HUMIDITY)
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->source_id) == TASK_HUMIDITY)
         {
-            sprintf(msg_to_log, "Message: Humidity value: %d\n", (((struct _socket_msg_struct_ *)&recv_buffer)->data));
+            sprintf(msg_to_log, "Message: Humidity value: %d\n", (((struct _socket_msg_struct_ *)recv_buffer)->data));
             sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
                     timestamp_str, "Humididty Task");
 
         }
 
-        if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_level) == LOG_LEVEL_INFO)
+        if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_INFO)
         {
             strcat(msg_to_write, "| Log_Level: LOG_LEVEL_INFO ");
         }
-        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_level) == LOG_LEVEL_STARTUP)
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_STARTUP)
         {
             strcat(msg_to_write, "| Log_Level: LOG_LEVEL_STARTUP ");
         }
-        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_level) == LOG_LEVEL_SHUTDOWN)
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_SHUTDOWN)
         {
             strcat(msg_to_write, "| Log_Level: LOG_LEVEL_SHUTDOWN ");
         }
-        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_level) == LOG_LEVEL_CRITICAL)
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_CRITICAL)
         {
             strcat(msg_to_write, "| Log_Level: LOG_LEVEL_CRITICAL ");
         }
 
-        if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_type) == LOG_TYPE_DATA)
+        if ((((struct _socket_msg_struct_ *)recv_buffer)->log_type) == LOG_TYPE_DATA)
         {
             strcat(msg_to_write, "| Log_Type: LOG_TYPE_DATA ");
         }
-        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_type) == LOG_TYPE_ERROR)
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_type) == LOG_TYPE_ERROR)
         {
             strcat(msg_to_write, "| Log_Type: LOG_TYPE_ERROR ");
         }
-        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_type) == LOG_TYPE_REQUEST)
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_type) == LOG_TYPE_REQUEST)
         {
             strcat(msg_to_write, "| Log_Type: LOG_TYPE_REQUEST ");
         }
-        else if ((((struct _socket_msg_struct_ *)&recv_buffer)->log_type) == LOG_TYPE_RESPONSE)
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_type) == LOG_TYPE_RESPONSE)
         {
             strcat(msg_to_write, "| Log_Type: LOG_TYPE_RESPONSE ");
         }
@@ -423,7 +424,7 @@ void flush_logger_mq(void)
     mq_getattr(logger_mq_handle, &logger_mq_attr);
 
     /* Check the number of messages left on logger task message queue */
-    long num_msgs_left = logger_mq_attr.msg_qnum;
+    long num_msgs_left = logger_mq_attr.mq_curmsgs;
 
     printf("Num of messages left on logger message queue: %ld\n", num_msgs_left);
 

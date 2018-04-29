@@ -47,6 +47,9 @@
 #define SOCKET_HB_PORT_NUM                   8670
 #define SOCKET_HB_LISTEN_QUEUE_SIZE          10
 
+#define TASK_PEDOMETER                      0x1
+#define TASK_HUMIDITY                       0x2
+
 /*----------------------------------- MACROS --------------------------------*/
 
 /*---------------------------------- GLOBALS --------------------------------*/

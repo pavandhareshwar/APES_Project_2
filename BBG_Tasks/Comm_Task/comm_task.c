@@ -118,27 +118,44 @@ void *comm_thread_func(void *arg)
     char ext_app_rsp_msg[32];
     size_t sent_bytes;
     sock_msg x_sock_data_rcvd;
+    char recv_buffer[25];
 
     while(!g_sig_kill_comm_thread)
     {
-        memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
+        //memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
+        memset(recv_buffer,'\0',sizeof(recv_buffer));
 
 #ifdef USE_UART_FOR_COMM
-        if (read(uart4_fd, &x_sock_data_rcvd, sizeof(x_sock_data_rcvd)) > 0)
+        //if (read(uart4_fd, &x_sock_data_rcvd, sizeof(x_sock_data_rcvd)) > 0)
+        if (read(uart4_fd, recv_buffer, sizeof(recv_buffer)) > 0)
         {
 #if 1
             printf("\nReceived data from TIVA:\n");
-            printf("Log Level:%d\n", x_sock_data_rcvd.log_level);
-            printf("Log Type:%d\n", x_sock_data_rcvd.log_type);
-            printf("Source ID:%d\n", x_sock_data_rcvd.source_id);
+            //printf("Log Level:%d\n", x_sock_data_rcvd.log_level);
+            //printf("Log Type:%d\n", x_sock_data_rcvd.log_type);
+            //printf("Source ID:%d\n", x_sock_data_rcvd.source_id);
+            printf("Log Level:%d\n", ((sock_msg *)recv_buffer)->log_level);
+            printf("Log Type:%d\n", ((sock_msg *)recv_buffer)->log_type);
+            printf("Source ID:%d\n", ((sock_msg *)recv_buffer)->source_id);
             if (x_sock_data_rcvd.source_id == TASK_PEDOMETER)
             {
-                printf("Step count is:%d\n",x_sock_data_rcvd.data);
+                //printf("Step count is:%d\n",x_sock_data_rcvd.data);
+                printf("Step count is:%d\n", ((sock_msg *)recv_buffer)->data);
             }
             else
             {
-                printf("Humidity data is:%d\n",x_sock_data_rcvd.data);
+                //printf("Humidity data is:%d\n",x_sock_data_rcvd.data);
+                printf("Humidity data is:%d\n", ((sock_msg *)recv_buffer)->data);
             }
+            printf("TimeStamp: %s\n", ((sock_msg *)recv_buffer)->timestamp);
+            //printf("TimeStamp: %s\n", x_sock_data_rcvd.timestamp);
+
+            x_sock_data_rcvd.log_level = ((sock_msg *)recv_buffer)->log_level;
+            x_sock_data_rcvd.log_type = ((sock_msg *)recv_buffer)->log_type;
+            x_sock_data_rcvd.source_id = ((sock_msg *)recv_buffer)->source_id;
+            x_sock_data_rcvd.data = ((sock_msg *)recv_buffer)->data;
+            strcpy(x_sock_data_rcvd.timestamp, ((sock_msg *)recv_buffer)->timestamp);
+
 #endif  
             if (gb_waiting_for_ext_app_uart_rsp == true)
             {
