@@ -120,7 +120,7 @@ void I2C0_Init(void)
 
 int PerformSysStartUpTest(void)
 {
-    int pedometerSensorTestVal = vTestPedometerSensor(WHO_AM_I_REG);
+    int pedometerSensorTestVal = vTestPedometerSensor();
     if (pedometerSensorTestVal == -1)
     {
         UARTSend("Pedometer Startup test failed\r\n");
@@ -567,11 +567,35 @@ void vPedometerTask( void *pvParameters )
 
 }
 
-int vTestPedometerSensor(uint32_t ui32RegToRead)
+
+void vLogData(uint32_t ui32LogLevel, uint32_t ui32LogType, uint32_t ui32SourceId, uint32_t ui32Data)
+{
+    sock_msg xSockMsg;
+    memset(&xSockMsg, '\0', sizeof(xSockMsg));
+
+    xSockMsg.ui32LogLevel = ui32LogLevel;
+    xSockMsg.ui32LogType = ui32LogType;
+    xSockMsg.ui32SourceId = ui32SourceId;
+    xSockMsg.ui32Data = ui32Data;
+    vGetTime(xSockMsg.ucTimeStamp);
+
+    /* Push the data to be sent via UART to the queue */
+    if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
+    {
+        if (xQueueSendToBack(xQueue, &xSockMsg, portMAX_DELAY) != pdPASS)
+        {
+            UARTSend("Queue Send failed\r\n");
+        }
+        xSemaphoreGive(xQueueMutex);
+    }
+
+}
+
+int vTestPedometerSensor()
 {
     int retVal = -1;
 
-    uint32_t default_value = vReadPedometerSensorregister(ui32RegToRead);
+    uint32_t default_value = vReadPedometerSensorregister(WHO_AM_I_REG);
     if(default_value == 105)
     {
         UARTSend("Valid Pedometer Sensor\r\n");
@@ -612,33 +636,67 @@ void vWritePedometerSensorRegister(uint32_t ui32RegToWrite, uint32_t ui32RegVal)
 uint32_t vReadPedometerSensorregister(uint32_t ui32RegToRead)
 {
     uint32_t ui32RegVal = 0;
-    int i=0;
+    int count=0;
 
     MAP_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, false);
     MAP_I2CMasterDataPut(I2C_BASE, ui32RegToRead);
     MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-    for(i=0; i<100; i++){
+    for(count=0; count<100; count++)
+    {
         SysCtlDelay(1000);
         if(!MAP_I2CMasterBusy(I2C_BASE)){
             break;
         }
     }
-    //while(MAP_I2CMasterBusy(I2C_BASE));
-    i=0;
+
+    count=0;
     SysCtlDelay(15000); //Delay by 1us
 
     MAP_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, true);
     MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
-    for(i=0; i<100; i++){
-            SysCtlDelay(1000);
-            if(!MAP_I2CMasterBusy(I2C_BASE)){
-                break;
-            }
+    for(count=0; count<100; count++)
+    {
+        SysCtlDelay(1000);
+        if(!MAP_I2CMasterBusy(I2C_BASE)){
+            break;
         }
-        //while(MAP_I2CMasterBusy(I2C_BASE));
+    }
     ui32RegVal = MAP_I2CMasterDataGet(I2C_BASE);
 
     return ui32RegVal;
+}
+
+uint8_t read_humid_user_reg()
+{
+    uint8_t reg_value;
+    int count=0;
+
+    /* Reading user register */
+    MAP_I2CMasterSlaveAddrSet(I2C_BASE, HUMIDITY_SENSOR_ADDR, false);
+    MAP_I2CMasterDataPut(I2C_BASE, READ_USER_REG);
+    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_SEND);
+    for(count=0; count<100; count++)
+    {
+        SysCtlDelay(1000);
+        if(!MAP_I2CMasterBusy(I2C_BASE)){
+            break;
+        }
+    }
+
+    SysCtlDelay(1000);
+
+    MAP_I2CMasterSlaveAddrSet(I2C_BASE, HUMIDITY_SENSOR_ADDR, true);
+    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
+    for(count=0; count<100; count++)
+    {
+        SysCtlDelay(1000);
+        if(!MAP_I2CMasterBusy(I2C_BASE)){
+            break;
+        }
+    }
+    SysCtlDelay(1000);
+    reg_value = MAP_I2CMasterDataGet(I2C_BASE);
+    return reg_value;
 }
 
 void xPedometerStepCountIntHandler(void)
@@ -664,6 +722,8 @@ void vHumidityTask(void *pvParameters)
     char buffer[25];
     sock_msg xSockMsg;
 
+    gui32HumData = 0;
+
     while(1)
     {
         if (gui32CheckHbHumTask == 1)
@@ -685,6 +745,8 @@ void vHumidityTask(void *pvParameters)
             float value = xReadHumidityValue();
 //            sprintf(buffer,"Humidity Value:%3.2f\r\n",value);
 //            UARTSend(buffer);
+
+            gui32HumData = (uint32_t)value;
 
             memset(&xSockMsg, 0, sizeof(sock_msg));
 
@@ -809,7 +871,7 @@ void vUARTReaderTask(void *pvParameters)
             if(UARTCharsAvail(UART7_BASE))
             {
                 memset(buffer, '\0', sizeof(buffer));
-                size = 28;
+                size = 20;
                 i = 0;
 
                 while(size--)
@@ -837,10 +899,35 @@ void vUARTReaderTask(void *pvParameters)
                 xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
                 xSockMsg.ui32LogType = LOG_TYPE_DATA;
                 xSockMsg.ui32SourceId = TASK_PEDOMETER;
-                if (((bbg_req_msg *)buffer)->req_recipient == TASK_PEDOMETER)
+                if(strcmp(((bbg_req_msg *)buffer)->rq_msg, "get_ped_data") == 0)
                 {
-                    xSockMsg.ui32Data = gui32IsrCounter;
+                    if (((bbg_req_msg *)buffer)->req_recipient == TASK_PEDOMETER)
+                    {
+                        xSockMsg.ui32Data = gui32IsrCounter;
+                    }
                 }
+                else if(strcmp(((bbg_req_msg *)buffer)->rq_msg, "get_ped_ssid") == 0)
+                {
+                    if(((bbg_req_msg *)buffer)->req_recipient == TASK_PEDOMETER)
+                    {
+                        xSockMsg.ui32Data = vReadPedometerSensorregister(WHO_AM_I_REG);
+                    }
+                }
+                else if(strcmp(((bbg_req_msg *)buffer)->rq_msg, "get_hum_data") == 0)
+                {
+                    if(((bbg_req_msg *)buffer)->req_recipient == TASK_HUMIDITY)
+                    {
+                        xSockMsg.ui32Data = gui32HumData;
+                    }
+                }
+                else if(strcmp(((bbg_req_msg *)buffer)->rq_msg, "get_hum_usid") == 0)
+                {
+                    if(((bbg_req_msg *)buffer)->req_recipient == TASK_HUMIDITY)
+                    {
+                        xSockMsg.ui32Data = read_humid_user_reg();
+                    }
+                }
+                vGetTime(xSockMsg.ucTimeStamp);
 
                 vTaskDelay(pdMS_TO_TICKS(500));
 
@@ -912,23 +999,4 @@ void UARTIntHandler(void)
         sprintf(&ui8CharToSend, "%c", UARTCharGet(UART7_BASE));
         UARTSend(&ui8CharToSend);
     }
-}
-
-uint8_t read_humid_user_reg()
-{
-    uint8_t reg_value;
-    /* Reading user register */
-    MAP_I2CMasterSlaveAddrSet(I2C_BASE, HUMIDITY_SENSOR_ADDR, false);
-    MAP_I2CMasterDataPut(I2C_BASE, READ_USER_REG);
-    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_SEND);
-    while(MAP_I2CMasterBusy(I2C_BASE));
-
-    SysCtlDelay(1000);
-
-    MAP_I2CMasterSlaveAddrSet(I2C_BASE, HUMIDITY_SENSOR_ADDR, true);
-    MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
-    while(MAP_I2CMasterBusy(I2C_BASE));
-    SysCtlDelay(1000);
-    reg_value = MAP_I2CMasterDataGet(I2C_BASE);
-    return reg_value;
 }
