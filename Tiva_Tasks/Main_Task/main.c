@@ -31,8 +31,15 @@ int main(void)
     if (startupTestRetVal == -1)
     {
         UARTSend("Startup Test Failed. Exiting system\r\n");
+        /* Sending failure case to BBG */
+        vLogData(LOG_LEVEL_STARTUP, LOG_TYPE_ERROR, TASK_MAIN, FAILURE );
         GPIOPinWrite(GPIO_PORTN_BASE,GPIO_PIN_0,1);
         exit(1);
+    }
+    else
+    {
+        /* Sending success case to BBG */
+        vLogData(LOG_LEVEL_STARTUP, LOG_TYPE_DATA, TASK_MAIN, SUCCESS );
     }
 
     if (CreateTasks() == pdPASS)
@@ -44,6 +51,9 @@ int main(void)
     }
     else
     {
+        /* Sending success case to BBG */
+        vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_ERROR, TASK_MAIN, FAILURE );
+
         UARTSend("Task creation failed\r\n");
         i32RetVal = -1;
     }
@@ -222,6 +232,8 @@ void UARTSend(uint8_t *pui8MsgStr)
 
 void vMainTask( void *pvParameters )
 {
+    static heartbeat_count = 0;
+
     xHbPedTaskCheckSem = xSemaphoreCreateMutex();
     xHbPedTaskValSem = xSemaphoreCreateMutex();
 
@@ -249,12 +261,15 @@ void vMainTask( void *pvParameters )
         if (xSemaphoreTake(xHbPedTaskValSem, pdMS_TO_TICKS(500)) == pdTRUE) {
             if (gui32PedTaskHb == 1)
             {
+                heartbeat_count++;
                 UARTSend("Pedometer task alive\r\n");
             }
             else
             {
                 gui32PedTaskUnAliveCount++;
                 if (gui32PedTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                    /* Sending heart beat failure case to BBG */
+                    vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_HEARTBEAT, TASK_MAIN, PED_HB_FAILURE );
                     UARTSend("Report pedometer task's unalive state to BBG\r\n");
                 }
             }
@@ -272,12 +287,15 @@ void vMainTask( void *pvParameters )
         if (xSemaphoreTake(xHbHumTaskValSem, pdMS_TO_TICKS(500)) == pdTRUE) {
             if (gui32HumTaskHb == 1)
             {
+                heartbeat_count++;
                 UARTSend("Humidity task alive\r\n");
             }
             else
             {
                 gui32HumTaskUnAliveCount++;
                 if (gui32HumTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                    /* Sending heart beat failure case to BBG */
+                    vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_HEARTBEAT, TASK_MAIN, HUM_HB_FAILURE );
                     UARTSend("Report humidity task's unalive state to BBG\r\n");
                 }
             }
@@ -295,12 +313,15 @@ void vMainTask( void *pvParameters )
         if (xSemaphoreTake(xHbUARTWrTaskValSem, pdMS_TO_TICKS(500)) == pdTRUE) {
             if (gui32UARTWrTaskHb == 1)
             {
+                heartbeat_count++;
                 UARTSend("UART writer task alive\r\n");
             }
             else
             {
                 gui32UARTWrTaskUnAliveCount++;
                 if (gui32UARTWrTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                    /* Sending heart beat failure case to BBG */
+                    vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_HEARTBEAT, TASK_MAIN, UW_HB_FAILURE );
                     UARTSend("Report UART writer task's unalive state to BBG\r\n");
                 }
             }
@@ -318,18 +339,27 @@ void vMainTask( void *pvParameters )
         if (xSemaphoreTake(xHbUARTRdTaskValSem, pdMS_TO_TICKS(1000)) == pdTRUE) {
             if (gui32UARTRdTaskHb == 1)
             {
+                heartbeat_count++;
                 UARTSend("UART reader task alive\r\n");
             }
             else
             {
                 gui32UARTRdTaskUnAliveCount++;
                 if (gui32UARTRdTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                    /* Sending heart beat failure case to BBG */
+                    vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_HEARTBEAT, TASK_MAIN, UR_HB_FAILURE );
                     UARTSend("Report UART reader task's unalive state to BBG\r\n");
                 }
             }
             xSemaphoreGive(xHbUARTRdTaskValSem);
         }
 
+        if((heartbeat_count % 4) == 0)
+        {
+            /* Sending heart beat failure case to BBG */
+            vLogData(LOG_LEVEL_INFO, LOG_TYPE_HEARTBEAT, TASK_MAIN, HB_SUCCESS );
+        }
+        heartbeat_count = 0;
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
 }
@@ -517,7 +547,6 @@ void vPedometerTask( void *pvParameters )
         }
     }
 #else
-    sock_msg xSockMsg;
 
     for (;;)
     {
@@ -529,35 +558,20 @@ void vPedometerTask( void *pvParameters )
             }
 
             if (xSemaphoreTake(xHbPedTaskValSem, portMAX_DELAY) == pdTRUE) {
-                gui32PedTaskHb = 1;
+                //gui32PedTaskHb = 1;
                 xSemaphoreGive(xHbPedTaskValSem);
             }
         }
         else
         {
 #if 1
-            memset(&xSockMsg, '\0', sizeof(xSockMsg));
             if (xSemaphoreTake(xPedometerDataAvail, portMAX_DELAY))
             {
-                memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
-                sprintf(ui8_msg_str, "Step counter is %d\r\n", gui32IsrCounter);
-                UARTSend(ui8_msg_str);
+                  memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
+//                sprintf(ui8_msg_str, "Step counter is %d\r\n", gui32IsrCounter);
+//                UARTSend(ui8_msg_str);
 
-                xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
-                xSockMsg.ui32LogType = LOG_TYPE_DATA;
-                xSockMsg.ui32SourceId = TASK_PEDOMETER;
-                xSockMsg.ui32Data = gui32IsrCounter;
-                vGetTime(xSockMsg.ucTimeStamp);
-
-                /* Push the data to be sent via UART to the queue */
-                if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
-                {
-                    if (xQueueSendToBack(xQueue, &xSockMsg, portMAX_DELAY) != pdPASS)
-                    {
-                        UARTSend("Queue Send failed\r\n");
-                    }
-                    xSemaphoreGive(xQueueMutex);
-                }
+                vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_DATA, TASK_PEDOMETER, gui32IsrCounter );
             }
 #endif
         }
@@ -720,7 +734,6 @@ void xPedometerStepCountIntHandler(void)
 void vHumidityTask(void *pvParameters)
 {
     char buffer[25];
-    sock_msg xSockMsg;
 
     gui32HumData = 0;
 
@@ -748,23 +761,8 @@ void vHumidityTask(void *pvParameters)
 
             gui32HumData = (uint32_t)value;
 
-            memset(&xSockMsg, 0, sizeof(sock_msg));
+            vLogData(LOG_LEVEL_INFO, LOG_TYPE_DATA, TASK_HUMIDITY, (uint32_t)value );
 
-            xSockMsg.ui32LogLevel = LOG_LEVEL_INFO;
-            xSockMsg.ui32LogType = LOG_TYPE_DATA;
-            xSockMsg.ui32SourceId = TASK_HUMIDITY;
-            xSockMsg.ui32Data = (uint32_t)value;
-            vGetTime(xSockMsg.ucTimeStamp);
-
-            /* Push the data to be sent via UART to the queue */
-            if (xSemaphoreTake(xQueueMutex, portMAX_DELAY))
-            {
-                if (xQueueSendToBack(xQueue, &xSockMsg, portMAX_DELAY) != pdPASS)
-                {
-                    UARTSend("Queue Send failed\r\n");
-                }
-                xSemaphoreGive(xQueueMutex);
-            }
 #endif
         }
 

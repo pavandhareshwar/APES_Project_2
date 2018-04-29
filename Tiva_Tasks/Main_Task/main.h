@@ -80,6 +80,13 @@
 #define QUEUE_LENGTH                        10
 #define HB_QUEUE_LENGTH                     20
 
+#define SUCCESS                             1
+#define FAILURE                             0
+#define HB_SUCCESS                          0
+#define PED_HB_FAILURE                      1
+#define HUM_HB_FAILURE                      2
+#define UW_HB_FAILURE                       3
+#define UR_HB_FAILURE                       4
 
 /* Task Defines */
 #define TASK_PEDOMETER                      0x1
