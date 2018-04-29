@@ -170,9 +170,9 @@ void *comm_thread_func(void *arg)
             }
             else
             {
-                //post_data_to_logger_task_queue(x_sock_data_rcvd);
+                post_data_to_logger_task_queue(x_sock_data_rcvd);
             
-                //post_data_to_decision_task_queue(x_sock_data_rcvd);
+                post_data_to_decision_task_queue(x_sock_data_rcvd);
             }
         }
 
@@ -278,6 +278,17 @@ void *ext_app_int_thread_func(void *arg)
                     if (write(uart4_fd, (char *)&recv_buffer, sizeof(recv_buffer)) > 0)
                     {
                         printf("Sent request to Tiva\n");
+                        
+                        sock_msg x_sock_msg_to_log;
+                        memset(&x_sock_msg_to_log, '\0', sizeof(sock_msg));
+                        
+                        x_sock_msg_to_log.log_level = LOG_LEVEL_INFO;
+                        x_sock_msg_to_log.log_type = LOG_TYPE_REQUEST;
+                        x_sock_msg_to_log.source_id = EXTERNAL_APP;
+                        x_sock_msg_to_log.data = 0;
+
+                        post_data_to_logger_task_queue(x_sock_msg_to_log);
+                        
                         gb_waiting_for_ext_app_uart_rsp = true;
                     
                         sem_wait(&sem_ext_app_req_rsp);

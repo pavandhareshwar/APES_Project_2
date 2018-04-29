@@ -335,14 +335,22 @@ void read_from_logger_msg_queue(void)
             sprintf(msg_to_log, "Message: Step count: %d\n", (((struct _socket_msg_struct_ *)recv_buffer)->data));
             sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
                     timestamp_str, "Pedometer Task");
-
         }
         else if ((((struct _socket_msg_struct_ *)recv_buffer)->source_id) == TASK_HUMIDITY)
         {
             sprintf(msg_to_log, "Message: Humidity value: %d\n", (((struct _socket_msg_struct_ *)recv_buffer)->data));
             sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
                     timestamp_str, "Humididty Task");
-
+        }
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->source_id) == TASK_MAIN)
+        {
+            sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
+                    timestamp_str, "Main Task");
+        }
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->source_id) == EXTERNAL_APP)
+        {
+            sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
+                    timestamp_str, "Main Task");
         }
 
         if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_INFO)
@@ -352,6 +360,10 @@ void read_from_logger_msg_queue(void)
         else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_STARTUP)
         {
             strcat(msg_to_write, "| Log_Level: LOG_LEVEL_STARTUP ");
+            if ((((struct _socket_msg_struct_ *)recv_buffer)->data) == 1)
+                strcpy(msg_to_log, "Message: Startup Test Success\n");
+            else
+                strcpy(msg_to_log, "Message: Startup Test Failure\n");
         }
         else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_SHUTDOWN)
         {
@@ -378,6 +390,20 @@ void read_from_logger_msg_queue(void)
         {
             strcat(msg_to_write, "| Log_Type: LOG_TYPE_RESPONSE ");
         }
+        else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_type) == LOG_TYPE_HEARTBEAT)
+        {
+            strcat(msg_to_write, "| Log_Type: LOG_TYPE_HEARTBEAT ");
+            if ((((struct _socket_msg_struct_ *)recv_buffer)->data) == 0)
+                strcpy(msg_to_log, "Message: All tasks are alive\n");
+            else if ((((struct _socket_msg_struct_ *)recv_buffer)->data) == 1)
+                strcpy(msg_to_log, "Message: Pedometer Task not alive\n");
+            else if ((((struct _socket_msg_struct_ *)recv_buffer)->data) == 2)
+                strcpy(msg_to_log, "Message: Humidity Task not alive\n");
+            else if ((((struct _socket_msg_struct_ *)recv_buffer)->data) == 3)
+                strcpy(msg_to_log, "Message: Comm Interface Writer Task not alive\n");
+            else if ((((struct _socket_msg_struct_ *)recv_buffer)->data) == 4)
+                strcpy(msg_to_log, "Message: Comm Interface Reader Task not alive\n");
+        }
 
         strcat(msg_to_write, " | ");
         strcat(msg_to_write, msg_to_log);
@@ -385,7 +411,6 @@ void read_from_logger_msg_queue(void)
         printf("Message to write: %s\n", msg_to_write);
         int num_written_bytes = write(logger_fd, msg_to_write, strlen(msg_to_write));
     }
-
 }
 
 void sig_handler(int sig_num)

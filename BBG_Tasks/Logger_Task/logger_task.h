@@ -61,12 +61,15 @@
 /* Task Defines */
 #define TASK_PEDOMETER                      0x1
 #define TASK_HUMIDITY                       0x2
+#define TASK_MAIN                           0x3
+#define EXTERNAL_APP                        0x4
 
 /* Log type defines */
 #define LOG_TYPE_DATA                       0x1
 #define LOG_TYPE_ERROR                      0x2
 #define LOG_TYPE_REQUEST                    0x3
 #define LOG_TYPE_RESPONSE                   0x4
+#define LOG_TYPE_HEARTBEAT                  0x5
 
 /* Log level defines */
 #define LOG_LEVEL_INFO                      0x1
