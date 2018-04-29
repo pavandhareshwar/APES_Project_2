@@ -84,12 +84,14 @@
 /* Task Defines */
 #define TASK_PEDOMETER                      0x1
 #define TASK_HUMIDITY                       0x2
+#define TASK_MAIN                           0x3
 
 /* Log type defines */
 #define LOG_TYPE_DATA                       0x1
 #define LOG_TYPE_ERROR                      0x2
 #define LOG_TYPE_REQUEST                    0x3
 #define LOG_TYPE_RESPONSE                   0x4
+#define LOG_TYPE_HEARTBEAT                  0x5
 
 /* Log level defines */
 #define LOG_LEVEL_INFO                      0x1
@@ -125,6 +127,7 @@ TaskHandle_t hdlPedTask, hdlHumTask, hdlUARTWriterTask, hdlUARTReaderTask, hdlMa
 uint32_t g_ui32SysClock;
 
 uint32_t gui32IsrCounter;
+uint32_t gui32HumData;
 
 uint32_t gui32CheckHbPedTask, gui32CheckHbHumTask, gui32CheckHbUARTWrTask, gui32CheckHbUARTRdTask;
 uint32_t gui32PedTaskHb, gui32HumTaskHb, gui32UARTWrTaskHb, gui32UARTRdTaskHb;
@@ -152,7 +155,7 @@ typedef struct
 {
     int req_recipient;
     int params;
-    char rq_msg[16];
+    char rq_msg[12];
 }bbg_req_msg;
 
 /**
@@ -347,10 +350,13 @@ void xPedometerStepCountIntHandler(void);
 
 void vMainTask( void *pvParameters );
 
-int vTestPedometerSensor(uint32_t ui32RegToRead);
+int vTestPedometerSensor();
 uint8_t read_humid_user_reg();
 int vTestHumiditySensor();
 
+int PerformSysStartUpTest(void);
 void LED_Init();
+
+void vLogData(uint32_t ui32LogLevel, uint32_t ui32LogType, uint32_t ui32SourceId, uint32_t ui32Data);
 
 #endif /* MAIN_H_ */
