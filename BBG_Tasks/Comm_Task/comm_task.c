@@ -122,7 +122,7 @@ void *comm_thread_func(void *arg)
 
     while(!g_sig_kill_comm_thread)
     {
-        //memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
+        memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
         memset(recv_buffer,'\0',sizeof(recv_buffer));
 
 #ifdef USE_UART_FOR_COMM
@@ -168,14 +168,11 @@ void *comm_thread_func(void *arg)
 
                 sem_post(&sem_ext_app_req_rsp);
             }
-            else
-            {
-                post_data_to_logger_task_queue(x_sock_data_rcvd);
+                
+            post_data_to_logger_task_queue(x_sock_data_rcvd);
             
-                post_data_to_decision_task_queue(x_sock_data_rcvd);
-            }
+            post_data_to_decision_task_queue(x_sock_data_rcvd);
         }
-
 #endif
     }
 
@@ -281,10 +278,19 @@ void *ext_app_int_thread_func(void *arg)
                         
                         sock_msg x_sock_msg_to_log;
                         memset(&x_sock_msg_to_log, '\0', sizeof(sock_msg));
-                        
+                       
+                        time_t tval = time(NULL); 
+                        struct tm *cur_time = localtime(&tval);
+
+                        char timestamp_str[32];
+                        memset(timestamp_str, '\0', sizeof(timestamp_str));
+
+                        sprintf(timestamp_str, "%02d:%02d:%02d", cur_time->tm_hour, cur_time->tm_min, cur_time->tm_sec);
+
                         x_sock_msg_to_log.log_level = LOG_LEVEL_INFO;
                         x_sock_msg_to_log.log_type = LOG_TYPE_REQUEST;
                         x_sock_msg_to_log.source_id = EXTERNAL_APP;
+                        strcpy(x_sock_msg_to_log.timestamp, timestamp_str);
                         x_sock_msg_to_log.data = 0;
 
                         post_data_to_logger_task_queue(x_sock_msg_to_log);

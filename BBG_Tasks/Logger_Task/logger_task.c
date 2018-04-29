@@ -325,7 +325,7 @@ void read_from_logger_msg_queue(void)
         char msg_to_write[LOG_MSG_PAYLOAD_SIZE];
         memset(msg_to_write, '\0', sizeof(msg_to_write));
         
-        char msg_to_log[32];
+        char msg_to_log[LOG_MSG_PAYLOAD_SIZE];
         memset(msg_to_log, '\0', sizeof(msg_to_log));
         
         strcpy(timestamp_str, (((struct _socket_msg_struct_ *)recv_buffer)->timestamp));
@@ -350,7 +350,12 @@ void read_from_logger_msg_queue(void)
         else if ((((struct _socket_msg_struct_ *)recv_buffer)->source_id) == EXTERNAL_APP)
         {
             sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
-                    timestamp_str, "Main Task");
+                    timestamp_str, "External App");
+        }
+        else
+        {
+            sprintf(msg_to_write, "Timestamp: %s | Message_Src: %s ",
+                    timestamp_str, "Unknown");
         }
 
         if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_INFO)
@@ -372,6 +377,10 @@ void read_from_logger_msg_queue(void)
         else if ((((struct _socket_msg_struct_ *)recv_buffer)->log_level) == LOG_LEVEL_CRITICAL)
         {
             strcat(msg_to_write, "| Log_Level: LOG_LEVEL_CRITICAL ");
+        }
+        else
+        {
+            strcat(msg_to_write, "| Log_Level: LOG_LEVEL_UNKNOWN ");
         }
 
         if ((((struct _socket_msg_struct_ *)recv_buffer)->log_type) == LOG_TYPE_DATA)
@@ -403,6 +412,12 @@ void read_from_logger_msg_queue(void)
                 strcpy(msg_to_log, "Message: Comm Interface Writer Task not alive\n");
             else if ((((struct _socket_msg_struct_ *)recv_buffer)->data) == 4)
                 strcpy(msg_to_log, "Message: Comm Interface Reader Task not alive\n");
+            else
+                strcpy(msg_to_write, "Message: Invalid message for heartbeat\n");
+        }
+        else
+        {
+            strcat(msg_to_write, "| Log_Type: LOG_TYPE_UNKNOWN ");
         }
 
         strcat(msg_to_write, " | ");
@@ -425,11 +440,11 @@ void sig_handler(int sig_num)
         else if (sig_num == SIGUSR1)
             printf("Caught signal %s in logger task\n", "SIGKILL");
 
-        g_sig_kill_logger_thread = 1;
-        g_sig_kill_sock_hb_thread = 1;
-
         /* TODO: Add code to flush all the messages to the log file */
         flush_logger_mq();
+        
+        g_sig_kill_logger_thread = 1;
+        g_sig_kill_sock_hb_thread = 1;
         
         //pthread_join(sensor_thread_id, NULL);
         //pthread_join(socket_thread_id, NULL);
