@@ -17,6 +17,7 @@ int main(void)
 
     /* Initializing the UART */
     UART0_Init();
+    UART7Init();
 
     /* Initializing LED's */
     LED_Init();
@@ -178,7 +179,7 @@ BaseType_t CreateTasks(void)
 
     if(xTaskCreate(vHumidityTask, "Humidity_Task", TASK_BUFFER_SIZE, NULL, 1, &hdlHumTask) == pdFALSE)
     {
-        UARTSend("Pedometer Task creation failed\r\n");
+        UARTSend("Humidity Task creation failed\r\n");
         xRetVal = pdFAIL;
         return xRetVal;
     }
@@ -190,7 +191,7 @@ BaseType_t CreateTasks(void)
         return xRetVal;
     }
 
-    if(xTaskCreate(vUARTReaderTask, "UARTWriterTask", TASK_BUFFER_SIZE, NULL, 1, &hdlUARTReaderTask) == pdFALSE)
+    if(xTaskCreate(vUARTReaderTask, "UARTReaderTask", TASK_BUFFER_SIZE, NULL, 1, &hdlUARTReaderTask) == pdFALSE)
     {
         UARTSend("UART Writer Task creation failed\r\n");
         xRetVal = pdFAIL;
@@ -558,7 +559,7 @@ void vPedometerTask( void *pvParameters )
             }
 
             if (xSemaphoreTake(xHbPedTaskValSem, portMAX_DELAY) == pdTRUE) {
-                //gui32PedTaskHb = 1;
+                gui32PedTaskHb = 1;
                 xSemaphoreGive(xHbPedTaskValSem);
             }
         }
@@ -805,7 +806,7 @@ float xReadHumidityValue(void)
 
 void vUARTWriterTask(void *pvParameters)
 {
-    UART7Init();
+
     sock_msg xSockMsg;
 
     for(;;)
@@ -844,14 +845,14 @@ void vUARTWriterTask(void *pvParameters)
 
 void vUARTReaderTask(void *pvParameters)
 {
-    sock_msg xSockMsg;
-    uint32_t size = 28;
-    uint8_t buffer[32];
+    uint32_t size = 0;
+    uint8_t buffer[20];
     int i = 0;
     char ui8CharToSend;
 
     for (;;)
     {
+
         if (gui32CheckHbUARTRdTask == 1)
         {
             if (xSemaphoreTake(xHbUARTRdTaskCheckSem, portMAX_DELAY) == pdTRUE) {
@@ -868,7 +869,7 @@ void vUARTReaderTask(void *pvParameters)
         {
             if(UARTCharsAvail(UART7_BASE))
             {
-                memset(buffer, '\0', sizeof(buffer));
+                memset(buffer, 0, sizeof(buffer));
                 size = 20;
                 i = 0;
 
@@ -892,44 +893,37 @@ void vUARTReaderTask(void *pvParameters)
                 sprintf(printMsg, "Req Msg: %s\r\n", ((bbg_req_msg *)buffer)->rq_msg);
                 UARTSend(printMsg);
 
-                memset((void*)&xSockMsg, 0, sizeof(xSockMsg));
-
-                xSockMsg.ui32LogLevel = LOG_LEVEL_CRITICAL;
-                xSockMsg.ui32LogType = LOG_TYPE_DATA;
-                xSockMsg.ui32SourceId = TASK_PEDOMETER;
-                if(strcmp(((bbg_req_msg *)buffer)->rq_msg, "get_ped_data") == 0)
+                if(strncmp(((bbg_req_msg *)buffer)->rq_msg, "get_ped_data",MESSAGE_LENGTH) == 0)
                 {
                     if (((bbg_req_msg *)buffer)->req_recipient == TASK_PEDOMETER)
                     {
-                        xSockMsg.ui32Data = gui32IsrCounter;
+                        vLogData(LOG_LEVEL_INFO, LOG_TYPE_DATA, TASK_PEDOMETER, gui32IsrCounter );
                     }
                 }
-                else if(strcmp(((bbg_req_msg *)buffer)->rq_msg, "get_ped_ssid") == 0)
+                else if(strncmp(((bbg_req_msg *)buffer)->rq_msg, "get_ped_ssid",MESSAGE_LENGTH) == 0)
                 {
                     if(((bbg_req_msg *)buffer)->req_recipient == TASK_PEDOMETER)
                     {
-                        xSockMsg.ui32Data = vReadPedometerSensorregister(WHO_AM_I_REG);
+                        vLogData(LOG_LEVEL_INFO, LOG_TYPE_DATA, TASK_PEDOMETER, vReadPedometerSensorregister(WHO_AM_I_REG) );
                     }
                 }
-                else if(strcmp(((bbg_req_msg *)buffer)->rq_msg, "get_hum_data") == 0)
+                else if(strncmp(((bbg_req_msg *)buffer)->rq_msg, "get_hum_data",MESSAGE_LENGTH) == 0)
                 {
                     if(((bbg_req_msg *)buffer)->req_recipient == TASK_HUMIDITY)
                     {
-                        xSockMsg.ui32Data = gui32HumData;
+                        vLogData(LOG_LEVEL_INFO, LOG_TYPE_DATA, TASK_HUMIDITY, gui32HumData );
                     }
                 }
-                else if(strcmp(((bbg_req_msg *)buffer)->rq_msg, "get_hum_usid") == 0)
+                else if(strncmp(((bbg_req_msg *)buffer)->rq_msg, "get_hum_usid",MESSAGE_LENGTH) == 0)
                 {
                     if(((bbg_req_msg *)buffer)->req_recipient == TASK_HUMIDITY)
                     {
-                        xSockMsg.ui32Data = read_humid_user_reg();
+                        vLogData(LOG_LEVEL_INFO, LOG_TYPE_DATA, TASK_HUMIDITY, read_humid_user_reg() );
                     }
                 }
-                vGetTime(xSockMsg.ucTimeStamp);
 
                 vTaskDelay(pdMS_TO_TICKS(500));
 
-                UARTSendToBBG((uint8_t *)&xSockMsg, 25);
             }
         }
 
