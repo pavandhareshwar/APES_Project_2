@@ -28,7 +28,7 @@
 
 #define BUFF_SIZE			                 1024
 
-#define SOCK_REQ_MSG_API_MSG_LEN             64
+#define SOCK_REQ_MSG_API_MSG_LEN             13
 
 #define REQ_RECP_PEDOMETER_TASK              0x1 
 #define REQ_RECP_HUMIDITY_TASK               0x2

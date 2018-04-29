@@ -129,7 +129,7 @@ void *comm_thread_func(void *arg)
         //if (read(uart4_fd, &x_sock_data_rcvd, sizeof(x_sock_data_rcvd)) > 0)
         if (read(uart4_fd, recv_buffer, sizeof(recv_buffer)) > 0)
         {
-#if 1
+#if 0
             printf("\nReceived data from TIVA:\n");
             //printf("Log Level:%d\n", x_sock_data_rcvd.log_level);
             //printf("Log Type:%d\n", x_sock_data_rcvd.log_type);
@@ -137,7 +137,8 @@ void *comm_thread_func(void *arg)
             printf("Log Level:%d\n", ((sock_msg *)recv_buffer)->log_level);
             printf("Log Type:%d\n", ((sock_msg *)recv_buffer)->log_type);
             printf("Source ID:%d\n", ((sock_msg *)recv_buffer)->source_id);
-            if (x_sock_data_rcvd.source_id == TASK_PEDOMETER)
+            //if (x_sock_data_rcvd.source_id == TASK_PEDOMETER)
+            if (((sock_msg *)recv_buffer)->source_id == TASK_PEDOMETER)
             {
                 //printf("Step count is:%d\n",x_sock_data_rcvd.data);
                 printf("Step count is:%d\n", ((sock_msg *)recv_buffer)->data);
@@ -149,16 +150,16 @@ void *comm_thread_func(void *arg)
             }
             printf("TimeStamp: %s\n", ((sock_msg *)recv_buffer)->timestamp);
             //printf("TimeStamp: %s\n", x_sock_data_rcvd.timestamp);
-
+#endif  
             x_sock_data_rcvd.log_level = ((sock_msg *)recv_buffer)->log_level;
             x_sock_data_rcvd.log_type = ((sock_msg *)recv_buffer)->log_type;
             x_sock_data_rcvd.source_id = ((sock_msg *)recv_buffer)->source_id;
             x_sock_data_rcvd.data = ((sock_msg *)recv_buffer)->data;
             strcpy(x_sock_data_rcvd.timestamp, ((sock_msg *)recv_buffer)->timestamp);
 
-#endif  
             if (gb_waiting_for_ext_app_uart_rsp == true)
             {
+                printf("gb_waiting_for_ext_app_uart_rsp is true. Sending response to sock interface task\n");
                 gb_waiting_for_ext_app_uart_rsp = false;
           
                 sem_wait(&sem_sock_msg_shared);
@@ -169,9 +170,9 @@ void *comm_thread_func(void *arg)
             }
             else
             {
-                post_data_to_logger_task_queue(x_sock_data_rcvd);
+                //post_data_to_logger_task_queue(x_sock_data_rcvd);
             
-                post_data_to_decision_task_queue(x_sock_data_rcvd);
+                //post_data_to_decision_task_queue(x_sock_data_rcvd);
             }
         }
 
@@ -243,7 +244,7 @@ void *ext_app_int_thread_func(void *arg)
         perror("accept");
     }
 
-    char recv_buffer[BUFF_SIZE];
+    char recv_buffer[20];
 	while(!g_sig_kill_ext_app_sock_int_thread)
     {
         memset(recv_buffer, '\0', sizeof(recv_buffer));
@@ -273,7 +274,8 @@ void *ext_app_int_thread_func(void *arg)
                      * to Tiva and set the flag gb_waiting_for_ext_app_uart_rsp to true to
                      * make the comm_thread wait for response */
                 
-                    if (write(uart4_fd, (char *)&recv_buffer, sizeof(struct _ext_app_req_msg_struct_)) > 0)
+                    //if (write(uart4_fd, (char *)&recv_buffer, sizeof(struct _ext_app_req_msg_struct_)) > 0)
+                    if (write(uart4_fd, (char *)&recv_buffer, sizeof(recv_buffer)) > 0)
                     {
                         printf("Sent request to Tiva\n");
                         gb_waiting_for_ext_app_uart_rsp = true;
@@ -284,7 +286,7 @@ void *ext_app_int_thread_func(void *arg)
                         memset(rsp_buffer, '\0', sizeof(rsp_buffer));
 
                         sem_wait(&sem_sock_msg_shared);
-                        sprintf(rsp_buffer, "Step count: %d\n", x_sock_data_rcvd_shared.data);
+                        sprintf(rsp_buffer, "Response: %d\n", x_sock_data_rcvd_shared.data);
                         sem_post(&sem_sock_msg_shared);
 
                         size_t sent_bytes = send(accept_conn_id, rsp_buffer, strlen(rsp_buffer), 0);
@@ -296,19 +298,22 @@ void *ext_app_int_thread_func(void *arg)
                 }
                 else if ((((struct _ext_app_req_msg_struct_ *)&recv_buffer)->req_recipient) == TASK_HUMIDITY)
                 {
-                    if (write(uart4_fd, (char *)&recv_buffer, sizeof(struct _ext_app_req_msg_struct_)) > 0)
+                    //if (write(uart4_fd, (char *)&recv_buffer, sizeof(struct _ext_app_req_msg_struct_)) > 0)
+                    if (write(uart4_fd, (char *)&recv_buffer, sizeof(recv_buffer)) > 0)
                     {
                         printf("Sent request to Tiva\n");
                         gb_waiting_for_ext_app_uart_rsp = true;
-                        
+                    
                         sem_wait(&sem_ext_app_req_rsp);
 
                         char rsp_buffer[32];
                         memset(rsp_buffer, '\0', sizeof(rsp_buffer));
 
-                        sprintf(rsp_buffer, "Humidity data: %d\n", ((sock_msg *)recv_buffer)->data);
+                        sem_wait(&sem_sock_msg_shared);
+                        sprintf(rsp_buffer, "Response: %d\n", x_sock_data_rcvd_shared.data);
+                        sem_post(&sem_sock_msg_shared);
 
-                        size_t sent_bytes = send(accept_conn_id, buffer, strlen(buffer), 0);
+                        size_t sent_bytes = send(accept_conn_id, rsp_buffer, strlen(rsp_buffer), 0);
                         if (sent_bytes <= 0)
                         {
                             perror("send failed in comm_task to ext_app\n");
