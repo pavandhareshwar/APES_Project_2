@@ -24,6 +24,7 @@
 #include "driverlib/uart.h"
 #include "driverlib/i2c.h"
 #include "driverlib/interrupt.h"
+#include "driverlib/ssi.h"
 
 #include "utils/uartstdio.h"
 #include "inc/tm4c1294ncpdt.h"
@@ -121,6 +122,8 @@
 
 #define TASK_UNALIVE_CNT_UPPER_LIMIT        5
 #define MESSAGE_LENGTH                      12
+
+#define UART_ENABLE                         1
 
 
 SemaphoreHandle_t xUARTSemaphore, xUARTToBBGSemaphore;
@@ -366,5 +369,7 @@ int PerformSysStartUpTest(void);
 void LED_Init();
 
 void vLogData(uint32_t ui32LogLevel, uint32_t ui32LogType, uint32_t ui32SourceId, uint32_t ui32Data);
+
+void SPI_Init();
 
 #endif /* MAIN_H_ */

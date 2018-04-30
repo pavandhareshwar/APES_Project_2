@@ -17,7 +17,13 @@ int main(void)
 
     /* Initializing the UART */
     UART0_Init();
+
+#ifdef UART_ENABLE
+    /* Communication peripheral between BBG and TIVA */
     UART7Init();
+#else
+
+#endif
 
     /* Initializing LED's */
     LED_Init();
@@ -184,6 +190,14 @@ BaseType_t CreateTasks(void)
         return xRetVal;
     }
 
+    if(xTaskCreate(vMainTask, "MainTask", TASK_BUFFER_SIZE, NULL, 1, &hdlMainTask) == pdFALSE)
+    {
+        UARTSend("Main Task creation failed\r\n");
+        xRetVal = pdFAIL;
+        return xRetVal;
+    }
+
+#ifdef UART_ENABLE
     if(xTaskCreate(vUARTWriterTask, "UARTWriterTask", TASK_BUFFER_SIZE, NULL, 1, &hdlUARTWriterTask) == pdFALSE)
     {
         UARTSend("UART Writer Task creation failed\r\n");
@@ -198,12 +212,9 @@ BaseType_t CreateTasks(void)
         return xRetVal;
     }
 
-    if(xTaskCreate(vMainTask, "MainTask", TASK_BUFFER_SIZE, NULL, 1, &hdlMainTask) == pdFALSE)
-    {
-        UARTSend("Main Task creation failed\r\n");
-        xRetVal = pdFAIL;
-        return xRetVal;
-    }
+#else
+
+#endif
 
     return xRetVal;
 }
@@ -303,6 +314,7 @@ void vMainTask( void *pvParameters )
             xSemaphoreGive(xHbHumTaskValSem);
         }
 
+#ifdef UART_ENABLE
         /* Check heartbeat from UART writer task */
         if (xSemaphoreTake(xHbUARTWrTaskCheckSem, portMAX_DELAY) == pdTRUE) {
             gui32CheckHbUARTWrTask = 1;
@@ -346,7 +358,8 @@ void vMainTask( void *pvParameters )
             else
             {
                 gui32UARTRdTaskUnAliveCount++;
-                if (gui32UARTRdTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT){
+                if (gui32UARTRdTaskUnAliveCount > TASK_UNALIVE_CNT_UPPER_LIMIT)
+                {
                     /* Sending heart beat failure case to BBG */
                     vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_HEARTBEAT, TASK_MAIN, UR_HB_FAILURE );
                     UARTSend("Report UART reader task's unalive state to BBG\r\n");
@@ -360,6 +373,9 @@ void vMainTask( void *pvParameters )
             /* Sending heart beat failure case to BBG */
             vLogData(LOG_LEVEL_INFO, LOG_TYPE_HEARTBEAT, TASK_MAIN, HB_SUCCESS );
         }
+#else
+
+#endif
         heartbeat_count = 0;
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
@@ -803,6 +819,7 @@ float xReadHumidityValue(void)
     fHumidValue = (125.0*ui16FinalVal/65536)-6;
     return fHumidValue;
 }
+#ifdef UART_ENABLE
 
 void vUARTWriterTask(void *pvParameters)
 {
@@ -861,7 +878,7 @@ void vUARTReaderTask(void *pvParameters)
             }
 
             if (xSemaphoreTake(xHbUARTRdTaskValSem, portMAX_DELAY) == pdTRUE) {
-                gui32UARTRdTaskHb = 1;
+                //gui32UARTRdTaskHb = 1;
                 xSemaphoreGive(xHbUARTRdTaskValSem);
             }
         }
@@ -954,6 +971,10 @@ void UART7Init(void)
 
     xUARTToBBGSemaphore = xSemaphoreCreateMutex();
 }
+
+#else
+
+#endif
 
 void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen)
 {
