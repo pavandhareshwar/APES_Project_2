@@ -1,10 +1,16 @@
-
+/*************************************************************************
+* Author:       Pavan Dhareshwar & Sridhar Pavithrapu
+* Date:         04/122/2018
+* File:         main.h
+* Description:  Header file containing the macros, structs/enums, globals
+                and function prototypes for source file main.c
+*************************************************************************/
 
 
 #ifndef MAIN_H_
 #define MAIN_H_
 
-/* Headers Section */
+/*---------------------------------- INCLUDES -------------------------------*/
 #include <stdint.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -36,7 +42,10 @@
 #include "queue.h"
 #include "semphr.h"
 
-/* Macros section */
+#include "uart_utils.h"
+#include "lwip_utils.h"
+
+/*----------------------------------- MACROS --------------------------------*/
 
 #define SYSTEM_CLOCK                        120000000U /* System clock rate, 120 MHz */
 #define TASK_BUFFER_SIZE                    1024
@@ -124,7 +133,10 @@
 #define MESSAGE_LENGTH                      12
 
 #define UART_ENABLE                         1
+#define SYSTICKHZ                           100
 
+
+/*---------------------------------- GLOBALS --------------------------------*/
 
 SemaphoreHandle_t xUARTSemaphore, xUARTToBBGSemaphore;
 SemaphoreHandle_t xQueueMutex, xHBQueueMutex;
@@ -133,9 +145,6 @@ QueueHandle_t xQueue, xHBQueue;
 
 /* Timer Handles */
 TaskHandle_t hdlPedTask, hdlHumTask, hdlUARTWriterTask, hdlUARTReaderTask, hdlMainTask;
-
-/* System clock rate in Hz */
-uint32_t g_ui32SysClock;
 
 uint32_t gui32IsrCounter;
 uint32_t gui32HumData;
@@ -151,6 +160,7 @@ SemaphoreHandle_t xHbHumTaskCheckSem, xHbHumTaskValSem;
 SemaphoreHandle_t xHbUARTWrTaskCheckSem, xHbUARTWrTaskValSem;
 SemaphoreHandle_t xHbUARTRdTaskCheckSem, xHbUARTRdTaskValSem;
 
+/*---------------------------- STRUCTURES/ENUMERATIONS ----------------------*/
 
 /* Socket message structure */
 typedef struct
@@ -169,16 +179,8 @@ typedef struct
     char rq_msg[12];
 }bbg_req_msg;
 
-/**
- *  @brief UART Init
- *
- *  This function will perform the system level initialization of UART0
- *
- *  @param      void
- *
- *  @return     void
- */
-void UART0_Init(void);
+
+/*---------------------------- FUNCTION PROTOTYPES --------------------------*/
 
 /**
  *  @brief I2C Init
@@ -190,6 +192,7 @@ void UART0_Init(void);
  *  @return     void
  */
 void I2C0_Init(void);
+
 
 /**
  *  @brief Create primary tasks
@@ -205,16 +208,6 @@ void I2C0_Init(void);
  */
 BaseType_t CreateTasks(void);
 
-/**
- *  @brief UART Send function
- *
- *  This function will send the data in @param pui8MsgStr to UART
- *
- *  @param      pui8MsgStr      : pointer to message
- *
- *  @return     void
- */
-void UARTSend(uint8_t *pui8MsgStr);
 
 /**
  *  @brief Pedometer task init function
@@ -359,17 +352,114 @@ void UARTSendToBBG(char *pucBuffer, uint32_t ui32BufLen);
  */
 void xPedometerStepCountIntHandler(void);
 
+
+/**
+ *  @brief Main task
+ *
+ *  This function will serve as the Main task that will check
+ *  whether all the tasks are alive or not
+ *
+ *  @param      pvParameters : pointer to task parameters
+ *
+ *  @return     void
+ */
 void vMainTask( void *pvParameters );
 
+
+/**
+ *  @brief LWIP task
+ *
+ *  This function will serve as the LWIP task that will act as a
+ *  secondary communication interface.
+ *
+ *  @param      pvParameters : pointer to task parameters
+ *
+ *  @return     void
+ */
+void vLWIPTask( void *pvParameters );
+
+
+/**
+ *  @brief Pedometer Sensor Test
+ *
+ *  This function is used to test the pedometer sensor.
+ *
+ *  @param      void
+ *
+ *  @return     int: success/failure
+ */
 int vTestPedometerSensor();
-uint8_t read_humid_user_reg();
+
+
+/**
+ *  @brief Humidity Sensor Test
+ *
+ *  This function is used to test the humidity sensor.
+ *
+ *  @param      void
+ *
+ *  @return     int: success/failure
+ */
 int vTestHumiditySensor();
 
+/**
+ *  @brief Humidity User Register Value
+ *
+ *  This function is used to read the humidity user register value.
+ *
+ *  @param      void
+ *
+ *  @return     uint8_t: humidity user register value
+ */
+uint8_t read_humid_user_reg();
+
+/**
+ *  @brief System Startup Test
+ *
+ *  This function is used to test whether humidity and pedometer
+ *  sensors are working.
+ *
+ *  @param      void
+ *
+ *  @return     int: success/failure
+ */
 int PerformSysStartUpTest(void);
+
+/**
+​* ​ ​ @brief​ : Initialize the LED pins
+​* ​ ​
+​*
+​* ​ ​ @param​ ​ None
+​*
+​* ​ ​ @return​ ​None
+​*/
 void LED_Init();
 
+/**
+​* ​ ​ @brief​ : Log data to BBG
+​* ​ ​
+​*
+​* ​ ​ @param​ ​ ui32LogLevel: log level
+​* ​ ​          ui32LogType: log type
+​* ​ ​          ui32SourceId: log source id
+​* ​ ​          ui32Data: log data
+​* ​ ​
+​*
+​* ​ ​ @return​ ​None
+​*/
 void vLogData(uint32_t ui32LogLevel, uint32_t ui32LogType, uint32_t ui32SourceId, uint32_t ui32Data);
 
-void SPI_Init();
+/**
+ *  @brief LWIP send function
+ *
+ *  This function will write to lwip interface that connects Tiva with
+ *  BBG to transfer data between the two entities
+ *
+ *  @param      pucBuffer : pointer to data buffer
+ *  @param      ui32BufLen: data length
+ *
+ *  @return     void
+ */
+void LWIPSendToBBG(uint8_t *pui8Buffer, uint32_t ui32Len);
 
 #endif /* MAIN_H_ */

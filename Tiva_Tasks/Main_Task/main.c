@@ -1,9 +1,22 @@
+/*******************************************************************************
+* Author:       Pavan Dhareshwar & Sridhar Pavithrapu
+* Date:         04/22/2018
+* File:         main.c
+* Description:  Source file containing the functionality and implementation
+*               of the freertos functionality for pedometer sensor and
+*               humidity sensor along with LWIP/UART as communication interfaces
+********************************************************************************/
+
 /* Headers Section */
 #include "main.h"
+
+/* System clock rate in Hz */
+uint32_t g_ui32SysClock;
 
 int main(void)
 {
     int32_t  i32RetVal = -1;
+
     /* ---------------------------------------------------------------------------------------------------------- */
     /* Configure system clock to be at the max (120 MHz) */
     g_ui32SysClock = MAP_SysCtlClockFreqSet(SYSCTL_XTAL_25MHZ  /* Frequency of external crystal */
@@ -15,7 +28,7 @@ int main(void)
 
     /* ---------------------------------------------------------------------------------------------------------- */
 
-    /* Initializing the UART */
+    /* Initializing the UART for logging */
     UART0_Init();
 
 #ifdef UART_ENABLE
@@ -23,17 +36,35 @@ int main(void)
     UART7Init();
 #else
 
+    PinoutSet(true,false);
+
+    /* Enabling the systick handler for LWIP */
+    MAP_SysTickPeriodSet(g_ui32SysClock/ SYSTICKHZ);
+    MAP_SysTickEnable();
+    MAP_SysTickIntEnable();
+
+    /* Delay for Systick handler to initialize */
+    SysCtlDelay(1000);
+
+    /* LWIP socket initialize */
+    lwip_socket_init();
+
+    while(!gbReadyToSend);
+
 #endif
 
     /* Initializing LED's */
     LED_Init();
 
+    /* Initilaizing I2C */
     I2C0_Init();
 
+    /* Creating queue for logging */
     QueueCreate();
 
     gui32CheckHbPedTask = 0;
 
+    /* Check for startup test of pedometer and humidity sensor */
     int startupTestRetVal = PerformSysStartUpTest();
     if (startupTestRetVal == -1)
     {
@@ -68,14 +99,39 @@ int main(void)
 	return i32RetVal;
 }
 
-/**
-​* ​ ​ @brief​ : Initialize the LED pins
-​* ​ ​
-​*
-​* ​ ​ @param​ ​ None
-​*
-​* ​ ​ @return​ ​None
-​*/
+#ifndef UART_ENABLE
+
+void vLWIPTask( void *pvParameters )
+{
+    sock_msg xSockMsg;
+
+    for(;;)
+    {
+        memset((void*)&xSockMsg,0,sizeof(xSockMsg));
+
+        while(uxQueueSpacesAvailable(xQueue) != QUEUE_LENGTH)
+        {
+            if(xSemaphoreTake(xQueueMutex,portMAX_DELAY)){
+                if( xQueueReceive( xQueue, &xSockMsg, portMAX_DELAY ) != pdPASS ){
+                    UARTSend("\ERROR:Queue Receive\r\n");
+                }
+                else{
+                    LWIPSendToBBG((uint8_t *)&xSockMsg, sizeof(xSockMsg));
+                }
+                xSemaphoreGive(xQueueMutex);
+            }
+        }
+    }
+}
+
+void LWIPSendToBBG(uint8_t *pui8Buffer, uint32_t ui32Len)
+{
+    tcp_write(pcb, pui8Buffer, ui32Len, TCP_WRITE_FLAG_COPY);
+    tcp_output(pcb);
+}
+
+#endif
+
 void LED_Init()
 {
     MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
@@ -87,30 +143,6 @@ void LED_Init()
 
     /* Default the LEDs to OFF. */
     MAP_GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0 | GPIO_PIN_1, 0);
-}
-
-void UART0_Init(void)
-{
-    /* Enable the GPIO Peripheral used by the UART. */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-
-    /* Enable UART0 */
-    MAP_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
-
-    /* Configure GPIO Pins for UART mode. */
-    MAP_GPIOPinConfigure(GPIO_PA0_U0RX);
-    MAP_GPIOPinConfigure(GPIO_PA1_U0TX);
-    MAP_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-
-    /* Configure the UART : baud rate: 115200, 1 stop bit and no parity */
-    MAP_UARTConfigSetExpClk(UART0_BASE, g_ui32SysClock, 115200,
-                            (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
-                                        UART_CONFIG_PAR_NONE));
-
-    /* Create a semaphore for UART */
-    xUARTSemaphore = xSemaphoreCreateMutex();
-
-    UARTSend("UART0 initialization done\r\n");
 }
 
 void I2C0_Init(void)
@@ -137,6 +169,7 @@ void I2C0_Init(void)
 
 int PerformSysStartUpTest(void)
 {
+    /* Check for pedometer sensor */
     int pedometerSensorTestVal = vTestPedometerSensor();
     if (pedometerSensorTestVal == -1)
     {
@@ -144,6 +177,7 @@ int PerformSysStartUpTest(void)
         return -1;
     }
 
+    /* Check for humidity sensor */
     int humiditySensorTestVal = vTestHumiditySensor();
     if (humiditySensorTestVal == -1)
     {
@@ -156,6 +190,7 @@ int PerformSysStartUpTest(void)
 
 int QueueCreate(void)
 {
+    /* Creating queue for logging */
     xQueue = xQueueCreate(QUEUE_LENGTH, sizeof(sock_msg));
     if (xQueue != NULL)
     {
@@ -175,6 +210,8 @@ int QueueCreate(void)
 BaseType_t CreateTasks(void)
 {
     BaseType_t xRetVal = pdTRUE;
+
+#ifdef UART_ENABLE
 
     if(xTaskCreate(vPedometerTask, "Pedometer_Task", TASK_BUFFER_SIZE, NULL, 1, &hdlPedTask) == pdFALSE)
     {
@@ -197,7 +234,6 @@ BaseType_t CreateTasks(void)
         return xRetVal;
     }
 
-#ifdef UART_ENABLE
     if(xTaskCreate(vUARTWriterTask, "UARTWriterTask", TASK_BUFFER_SIZE, NULL, 1, &hdlUARTWriterTask) == pdFALSE)
     {
         UARTSend("UART Writer Task creation failed\r\n");
@@ -214,32 +250,22 @@ BaseType_t CreateTasks(void)
 
 #else
 
+    if(xTaskCreate(vPedometerTask, "Pedometer_Task", TASK_BUFFER_SIZE, NULL, 2, &hdlPedTask) == pdFALSE)
+    {
+        UARTSend("Pedometer Task creation failed\r\n");
+        xRetVal = pdFAIL;
+        return xRetVal;
+    }
+
+    if(xTaskCreate(vLWIPTask, "LWIP_Task", TASK_BUFFER_SIZE, NULL, 1, NULL) == pdFALSE)
+    {
+        UARTSend("LWIP Task creation failed\r\n");
+        xRetVal = pdFAIL;
+        return xRetVal;
+    }
 #endif
 
     return xRetVal;
-}
-
-void UARTSend(uint8_t *pui8MsgStr)
-{
-    uint32_t ui32_str_len = 0;
-
-    if(pui8MsgStr != NULL)
-    {
-        ui32_str_len = strlen(pui8MsgStr);
-
-        if( xSemaphoreTake( xUARTSemaphore, ( TickType_t ) 10 ) == pdTRUE )
-        {
-            while (ui32_str_len != 0)
-            {
-                /* Write a single character to UART */
-                UARTCharPut(UART0_BASE, *pui8MsgStr);
-                ui32_str_len--;
-                pui8MsgStr++;
-            }
-
-            xSemaphoreGive( xUARTSemaphore );
-        }
-    }
 }
 
 void vMainTask( void *pvParameters )
@@ -314,7 +340,6 @@ void vMainTask( void *pvParameters )
             xSemaphoreGive(xHbHumTaskValSem);
         }
 
-#ifdef UART_ENABLE
         /* Check heartbeat from UART writer task */
         if (xSemaphoreTake(xHbUARTWrTaskCheckSem, portMAX_DELAY) == pdTRUE) {
             gui32CheckHbUARTWrTask = 1;
@@ -373,9 +398,6 @@ void vMainTask( void *pvParameters )
             /* Sending heart beat failure case to BBG */
             vLogData(LOG_LEVEL_INFO, LOG_TYPE_HEARTBEAT, TASK_MAIN, HB_SUCCESS );
         }
-#else
-
-#endif
         heartbeat_count = 0;
         vTaskDelay(pdMS_TO_TICKS(5000));
     }
@@ -386,7 +408,6 @@ void vGetTime(char * input_string)
 {
     time_t current_time;
     struct tm *info;
-    char buffer[16];
     time(&current_time);
 
     info = localtime(&current_time);
@@ -567,6 +588,7 @@ void vPedometerTask( void *pvParameters )
 
     for (;;)
     {
+#ifdef UART_ENABLE
         if (gui32CheckHbPedTask == 1)
         {
             if (xSemaphoreTake(xHbPedTaskCheckSem, portMAX_DELAY) == pdTRUE) {
@@ -581,17 +603,28 @@ void vPedometerTask( void *pvParameters )
         }
         else
         {
-#if 1
             if (xSemaphoreTake(xPedometerDataAvail, portMAX_DELAY))
             {
                   memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
-//                sprintf(ui8_msg_str, "Step counter is %d\r\n", gui32IsrCounter);
-//                UARTSend(ui8_msg_str);
-
-                vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_DATA, TASK_PEDOMETER, gui32IsrCounter );
-            }
+#if 0
+                  sprintf(ui8_msg_str, "Step counter is %d\r\n", gui32IsrCounter);
+                  UARTSend(ui8_msg_str);
 #endif
+                  vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_DATA, TASK_PEDOMETER, gui32IsrCounter );
+            }
         }
+#else
+        if (xSemaphoreTake(xPedometerDataAvail, portMAX_DELAY))
+        {
+            memset(ui8_msg_str, '\0', sizeof(ui8_msg_str));
+#if 0
+            sprintf(ui8_msg_str, "Step counter is %d\r\n", gui32IsrCounter);
+            UARTSend(ui8_msg_str);
+#endif
+
+            vLogData(LOG_LEVEL_CRITICAL, LOG_TYPE_DATA, TASK_PEDOMETER, gui32IsrCounter );
+        }
+#endif
     }
 
 #endif
@@ -635,6 +668,7 @@ int vTestPedometerSensor()
 
     return retVal;
 }
+
 int vTestHumiditySensor()
 {
     int retVal = -1;
@@ -657,7 +691,7 @@ void vWritePedometerSensorRegister(uint32_t ui32RegToWrite, uint32_t ui32RegVal)
     MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_START);
     while(MAP_I2CMasterBusy(I2C_BASE));
 
-    SysCtlDelay(500); //Delay by 1us
+    SysCtlDelay(500);
 
     MAP_I2CMasterDataPut(I2C_BASE, ui32RegVal);
     MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
@@ -681,7 +715,7 @@ uint32_t vReadPedometerSensorregister(uint32_t ui32RegToRead)
     }
 
     count=0;
-    SysCtlDelay(15000); //Delay by 1us
+    SysCtlDelay(15000);
 
     MAP_I2CMasterSlaveAddrSet(I2C_BASE, LSM6DS3_SENSOR_ADDR, true);
     MAP_I2CMasterControl(I2C_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
@@ -770,17 +804,16 @@ void vHumidityTask(void *pvParameters)
         }
         else
         {
-#if 1
             memset(buffer,'0',sizeof(buffer));
             float value = xReadHumidityValue();
-//            sprintf(buffer,"Humidity Value:%3.2f\r\n",value);
-//            UARTSend(buffer);
-
+#if 0
+            sprintf(buffer,"Humidity Value:%3.2f\r\n",value);
+            UARTSend(buffer);
+#endif
             gui32HumData = (uint32_t)value;
 
             vLogData(LOG_LEVEL_INFO, LOG_TYPE_DATA, TASK_HUMIDITY, (uint32_t)value );
 
-#endif
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -819,6 +852,8 @@ float xReadHumidityValue(void)
     fHumidValue = (125.0*ui16FinalVal/65536)-6;
     return fHumidValue;
 }
+
+
 #ifdef UART_ENABLE
 
 void vUARTWriterTask(void *pvParameters)
@@ -964,15 +999,8 @@ void UART7Init(void)
                             (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
                                     UART_CONFIG_PAR_NONE));
 
-//    MAP_IntEnable(INT_UART7);
-//    MAP_UARTIntEnable(UART7_BASE, UART_INT_RX | UART_INT_RT);
-
-//    UARTLoopbackEnable(UART7_BASE);
-
     xUARTToBBGSemaphore = xSemaphoreCreateMutex();
 }
-
-#else
 
 #endif
 
@@ -1007,7 +1035,6 @@ void UARTIntHandler(void)
     while(MAP_UARTCharsAvail(UART7_BASE))
     {
         /* Read the next character from the UART and write it back to the UART. */
-//        UARTprintf(MAP_UARTCharGetNonBlocking(UART7_BASE));
         uint8_t ui8CharToSend;
         sprintf(&ui8CharToSend, "%c", UARTCharGet(UART7_BASE));
         UARTSend(&ui8CharToSend);

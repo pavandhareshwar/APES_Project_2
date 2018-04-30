@@ -23,6 +23,7 @@
 //*****************************************************************************
 
 #include <stdint.h>
+#define UART_ENABLE_MACRO
 
 //*****************************************************************************
 //
@@ -34,9 +35,6 @@ static void NmiSR(void);
 static void FaultISR(void);
 static void IntDefaultHandler(void);
 
-extern void xPortSysTickHandler(void);
-extern void xPortPendSVHandler(void);
-extern void vPortSVCHandler(void);
 
 //*****************************************************************************
 //
@@ -59,7 +57,20 @@ extern uint32_t __STACK_TOP;
 //
 //*****************************************************************************
 // To be added by user
-extern void UARTIntHandler(void);
+#ifdef UART_ENABLE_MACRO
+
+extern void xPortSysTickHandler(void);
+extern void xPortPendSVHandler(void);
+extern void vPortSVCHandler(void);
+
+#else
+
+extern void xPortPendSVHandler(void);
+extern void vPortSVCHandler(void);
+extern void SysTickIntHandler(void);
+extern void lwIPEthernetIntHandler(void);
+
+#endif
 
 //*****************************************************************************
 //
@@ -91,7 +102,11 @@ void (* const g_pfnVectors[])(void) =
     //IntDefaultHandler,                      // The PendSV handler
     //IntDefaultHandler,                      // The SysTick handler
     xPortPendSVHandler,                     // The PendSV handler
+#ifdef UART_ENABLE_MACRO
     xPortSysTickHandler,                    // The SysTick handler
+#else
+    SysTickIntHandler,                    // The SysTick handler
+#endif
     IntDefaultHandler,                      // GPIO Port A
     IntDefaultHandler,                      // GPIO Port B
     IntDefaultHandler,                      // GPIO Port C
@@ -132,7 +147,11 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // I2C1 Master and Slave
     IntDefaultHandler,                      // CAN0
     IntDefaultHandler,                      // CAN1
+#ifdef UART_ENABLE_MACRO
     IntDefaultHandler,                      // Ethernet
+#else
+    lwIPEthernetIntHandler,                      // Ethernet
+#endif
     IntDefaultHandler,                      // Hibernate
     IntDefaultHandler,                      // USB0
     IntDefaultHandler,                      // PWM Generator 3
@@ -152,8 +171,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // UART4 Rx and Tx
     IntDefaultHandler,                      // UART5 Rx and Tx
     IntDefaultHandler,                      // UART6 Rx and Tx
-//    IntDefaultHandler,                      // UART7 Rx and Tx
-    UARTIntHandler,                         // UART7 Rx and Tx
+    IntDefaultHandler,                      // UART7 Rx and Tx
     IntDefaultHandler,                      // I2C2 Master and Slave
     IntDefaultHandler,                      // I2C3 Master and Slave
     IntDefaultHandler,                      // Timer 4 subtimer A
