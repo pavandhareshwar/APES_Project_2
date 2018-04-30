@@ -103,12 +103,14 @@ int create_threads(void)
         return -1;
     }
 
+#ifdef USE_UART_FOR_COMM
     int ext_app_int_t_creat_ret_val = pthread_create(&ext_app_int_thread_id, NULL, &ext_app_int_thread_func, NULL);
     if (ext_app_int_t_creat_ret_val)
     {
         perror("External Application socket interface thread creation failed\n");
         return -1;
     }
+#endif
 
     return 0;
 }
@@ -120,12 +122,12 @@ void *comm_thread_func(void *arg)
     sock_msg x_sock_data_rcvd;
     char recv_buffer[25];
 
+#ifdef USE_UART_FOR_COMM
     while(!g_sig_kill_comm_thread)
     {
         memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
         memset(recv_buffer,'\0',sizeof(recv_buffer));
 
-#ifdef USE_UART_FOR_COMM
         //if (read(uart4_fd, &x_sock_data_rcvd, sizeof(x_sock_data_rcvd)) > 0)
         if (read(uart4_fd, recv_buffer, sizeof(recv_buffer)) > 0)
         {
@@ -173,8 +175,71 @@ void *comm_thread_func(void *arg)
             
             post_data_to_decision_task_queue(x_sock_data_rcvd);
         }
-#endif
     }
+#endif
+
+#ifdef USE_LWIP_FOR_COMM
+    int sock_comm_fd;
+    struct sockaddr_in sock_comm_address;
+    int sock_comm_addr_len = sizeof(sock_comm_address);
+
+    init_tx_sock(&sock_comm_fd, sock_comm_address, SOCKET_RX_PORT_NUM, SOCKET_RX_LISTEN_QUEUE_SIZE);
+
+    int accept_conn_id;
+    printf("Waiting for request...\n");
+    if ((accept_conn_id = accept(sock_comm_fd, (struct sockaddr *)&sock_comm_address,
+                    (socklen_t*)&sock_comm_addr_len)) < 0)
+    {
+        perror("accept failed");
+        //pthread_exit(NULL);
+    }
+
+    while (!g_sig_kill_sock_hb_thread)
+    {
+        memset(&x_sock_data_rcvd,'\0',sizeof(x_sock_data_rcvd));
+        
+        if (read(accept_conn_id, recv_buffer, sizeof(recv_buffer)) > 0)
+        {
+#if 0
+            printf("\nReceived data from TIVA:\n");
+            printf("Log Level:%d\n", ((sock_msg *)recv_buffer)->log_level);
+            printf("Log Type:%d\n", ((sock_msg *)recv_buffer)->log_type);
+            printf("Source ID:%d\n", ((sock_msg *)recv_buffer)->source_id);
+            //if (x_sock_data_rcvd.source_id == TASK_PEDOMETER)
+            if (((sock_msg *)recv_buffer)->source_id == TASK_PEDOMETER)
+            {
+                printf("Step count is:%d\n", ((sock_msg *)recv_buffer)->data);
+            }
+            else
+            {
+                printf("Humidity data is:%d\n", ((sock_msg *)recv_buffer)->data);
+            }
+            printf("TimeStamp: %s\n", ((sock_msg *)recv_buffer)->timestamp);
+#endif  
+            x_sock_data_rcvd.log_level = ((sock_msg *)recv_buffer)->log_level;
+            x_sock_data_rcvd.log_type = ((sock_msg *)recv_buffer)->log_type;
+            x_sock_data_rcvd.source_id = ((sock_msg *)recv_buffer)->source_id;
+            x_sock_data_rcvd.data = ((sock_msg *)recv_buffer)->data;
+            strcpy(x_sock_data_rcvd.timestamp, ((sock_msg *)recv_buffer)->timestamp);
+
+            if (gb_waiting_for_ext_app_uart_rsp == true)
+            {
+                printf("gb_waiting_for_ext_app_uart_rsp is true. Sending response to sock interface task\n");
+                gb_waiting_for_ext_app_uart_rsp = false;
+          
+                sem_wait(&sem_sock_msg_shared);
+                memcpy(&x_sock_data_rcvd_shared, &x_sock_data_rcvd, sizeof(sock_msg));            
+                sem_post(&sem_sock_msg_shared);
+
+                sem_post(&sem_ext_app_req_rsp);
+            }
+                
+            post_data_to_logger_task_queue(x_sock_data_rcvd);
+            
+            post_data_to_decision_task_queue(x_sock_data_rcvd);
+        }
+    }
+#endif
 
     pthread_exit(NULL);
 }
@@ -228,6 +293,7 @@ void *socket_hb_thread_func(void *arg)
     }
 }
 
+#ifdef USE_UART_FOR_COMM
 void *ext_app_int_thread_func(void *arg)
 {
     int serv_addr_len = sizeof(server_addr);
@@ -343,6 +409,43 @@ void *ext_app_int_thread_func(void *arg)
     }
 
     pthread_exit(NULL);
+}
+#endif
+
+void init_tx_sock(int *sock_fd, struct sockaddr_in server_addr_struct, int port_num, int listen_qsize)
+{
+    int serv_addr_len = sizeof(struct sockaddr_in);
+
+    /* Create the socket */
+    if ((*sock_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+    {
+        perror("socket creation failed");
+        pthread_exit(NULL); // Change these return values from pthread_exit
+    }
+
+    int option = 1;
+    if(setsockopt(*sock_fd, SOL_SOCKET, (SO_REUSEPORT | SO_REUSEADDR), (void *)&option, sizeof(option)) < 0)
+    {
+        perror("setsockopt failed");
+        pthread_exit(NULL);
+    }
+
+    server_addr_struct.sin_family = AF_INET;
+    server_addr_struct.sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr_struct.sin_port = htons(port_num);
+
+    if (bind(*sock_fd, (struct sockaddr *)&server_addr_struct,
+								sizeof(struct sockaddr_in))<0)
+    {
+        perror("bind failed");
+        pthread_exit(NULL);
+    }
+
+    if (listen(*sock_fd, listen_qsize) < 0)
+    {
+        perror("listen failed");
+        pthread_exit(NULL);
+    }
 }
 
 void init_sock(int *sock_fd, struct sockaddr_in *server_addr_struct,

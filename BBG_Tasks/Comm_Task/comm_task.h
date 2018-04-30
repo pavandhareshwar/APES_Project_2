@@ -40,6 +40,7 @@
 
 /*----------------------------------- MACROS --------------------------------*/
 #define USE_UART_FOR_COMM                   1
+//#define USE_LWIP_FOR_COMM                   1
 
 // Message queue attribute macros 
 #define MSG_QUEUE_MAX_NUM_MSGS              5
@@ -61,6 +62,9 @@
 #define BUFF_SIZE                           1024
 
 #define LOGGER_ATTR_LEN                     32
+
+#define SOCKET_RX_PORT_NUM                  61122
+#define SOCKET_RX_LISTEN_QUEUE_SIZE         10
 
 /* Source ID definations */
 #define TASK_PEDOMETER                      0x1
@@ -104,6 +108,7 @@ int comm_task_initialized;
 struct termios *uart4_config;
 char *uart4_port = "/dev/ttyO4";
 int uart4_fd;
+#endif
 
 bool gb_waiting_for_ext_app_uart_rsp;
 
@@ -113,7 +118,6 @@ bool gb_waiting_for_ext_app_uart_rsp;
 sem_t sem_ext_app_req_rsp;
 sem_t sem_sock_msg_shared;
 
-#endif
 
 /*---------------------------------- GLOBALS --------------------------------*/
 
@@ -201,6 +205,21 @@ void *socket_hb_thread_func(void *arg);
  *
  */
 void *ext_app_int_thread_func(void *arg);
+
+/**
+ *  @brief Create the socket and initialize transmit socket
+ *
+ *  This function create a socket for the given socket id.
+ *
+ *  @param sock_fd              : socket file descriptor
+ *         server_addr_struct   : server address of the socket
+ *         port_num             : port number in which the socket is communicating
+ *         listen_qsize         : number of connections the socket is accepting
+ *
+ *  @return void
+*/
+void init_tx_sock(int *sock_fd, struct sockaddr_in server_addr_struct, 
+        int port_num, int listen_qsize);
 
 /**
  *  @brief Create the socket and initialize
